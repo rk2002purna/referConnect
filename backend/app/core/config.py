@@ -28,7 +28,7 @@ class Settings(BaseSettings):
         "https://referconnect.vercel.app",
         "https://*.vercel.app"
     ])
-    ALLOWED_ORIGINS: str = Field(default="http://localhost:3000,http://127.0.0.1:3000,https://referconnect.vercel.app")
+    ALLOWED_ORIGINS: str = Field(default="*")
 
     # Email / Providers
     SENDGRID_API_KEY: str = Field(default="")
