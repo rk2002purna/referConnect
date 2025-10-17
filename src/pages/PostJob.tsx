@@ -8,7 +8,7 @@ import { Textarea } from '../components/ui/Textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/Select'
 import { Badge } from '../components/ui/Badge'
 import { VerificationStatusBanner } from '../components/verification'
-import { MapPin, Building2, DollarSign, Clock, Users, Briefcase, Plus, X, Save, Eye, Shield, AlertTriangle } from 'lucide-react'
+import { MapPin, Building2, DollarSign, Clock, Briefcase, Plus, X, Save, Eye, Shield } from 'lucide-react'
 
 interface JobFormData {
   title: string

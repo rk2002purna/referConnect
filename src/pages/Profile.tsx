@@ -45,6 +45,7 @@ import {
 export function Profile() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { refreshCompletionStatus } = useProfileCompletion()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -65,7 +66,7 @@ export function Profile() {
   
   // Job seeker specific states
   const [skills, setSkills] = useState<Array<{name: string, proficiency: number}>>([])
-  const [excludedCompanies, setExcludedCompanies] = useState<string[]>([])
+  const [excludedCompanies] = useState<string[]>([])
   const [experience, setExperience] = useState<ExperienceData[]>([])
   const [education, setEducation] = useState<EducationData[]>([])
   const [certifications, setCertifications] = useState<CertificationData[]>([])
@@ -118,9 +119,11 @@ export function Profile() {
   
   // Resume upload states
   const [uploadingResume, setUploadingResume] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   
   // Experience and Education data
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [experiences] = useState<Array<{
     id: string
     title: string

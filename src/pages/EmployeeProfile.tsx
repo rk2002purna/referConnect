@@ -21,10 +21,7 @@ import {
 import { 
   User, 
   Mail, 
-  Phone, 
   MapPin, 
-  Linkedin, 
-  Globe, 
   Building,
   Save, 
   Edit3, 
@@ -34,21 +31,11 @@ import {
   Plus,
   X,
   Eye,
-  Download,
-  Camera,
-  Award,
   Calendar,
   Users,
-  TrendingUp,
-  Gift,
-  Bell,
   Settings,
-  Shield,
-  Clock,
   ExternalLink,
-  Target,
-  BarChart3,
-  Briefcase
+  BarChart3
 } from 'lucide-react'
 
 interface EmployeeProfileData {
@@ -138,6 +125,7 @@ export function EmployeeProfile() {
   const [editData, setEditData] = useState<Partial<EmployeeProfileData>>({})
   
   // Email verification states
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [emailVerificationPending, setEmailVerificationPending] = useState(false)
   const [otpCode, setOtpCode] = useState('')
   const [showOtpModal, setShowOtpModal] = useState(false)
