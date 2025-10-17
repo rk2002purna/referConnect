@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .endpoints import auth, users, jobs, referrals, search, notifications, analytics, trust, dashboard, referral_requests, profile, job_posts, employee_profile
+from .endpoints import auth, users, jobs, referrals, search, notifications, analytics, trust, dashboard, referral_requests, profile, job_posts, employee_profile, health
 from .endpoints import verification_simple as verification, otp
 
 api_router_v1 = APIRouter()
@@ -21,3 +21,4 @@ api_router_v1.include_router(employee_profile.router, prefix="/employee-profile"
 api_router_v1.include_router(job_posts.router, prefix="/job-posts", tags=["job-posts"])
 api_router_v1.include_router(verification.router, prefix="/verification", tags=["verification"])
 api_router_v1.include_router(otp.router, prefix="/otp", tags=["otp"])
+api_router_v1.include_router(health.router, tags=["health"])

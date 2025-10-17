@@ -22,8 +22,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str = Field(default="sqlite:///./referconnect.db")
 
     # CORS
-    CORS_ALLOWED_ORIGINS: List[str] = Field(default_factory=lambda: ["*"])
-    ALLOWED_ORIGINS: str = Field(default="http://localhost:3000,http://127.0.0.1:3000")
+    CORS_ALLOWED_ORIGINS: List[str] = Field(default_factory=lambda: [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://referconnect.vercel.app",
+        "https://*.vercel.app"
+    ])
+    ALLOWED_ORIGINS: str = Field(default="http://localhost:3000,http://127.0.0.1:3000,https://referconnect.vercel.app")
 
     # Email / Providers
     SENDGRID_API_KEY: str = Field(default="")
