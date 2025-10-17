@@ -75,6 +75,7 @@ export function CompanySearchStep({ onCompanySelect, onPrevious, onNext }: Compa
     }
 
     fetchCompanies()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSearch = async (query: string) => {

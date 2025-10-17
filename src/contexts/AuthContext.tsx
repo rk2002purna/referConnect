@@ -39,6 +39,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } else {
       setLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const refreshUser = async () => {

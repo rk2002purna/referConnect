@@ -37,7 +37,8 @@ export function OTPVerificationModal({
       // Automatically send OTP when modal opens
       handleSendOTP()
     }
-  }, [isOpen])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, otpSent])
 
   useEffect(() => {
     if (timeLeft > 0) {
