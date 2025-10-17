@@ -6,24 +6,14 @@ import uvicorn
 from app.main import create_app
 
 def run_migrations():
-    """Run Alembic migrations"""
-    print("🔄 Running database migrations...")
+    """Run database table creation"""
+    print("🔄 Creating database tables...")
     try:
-        result = subprocess.run(
-            ["alembic", "upgrade", "head"],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        print("✅ Database migrations completed successfully")
-        if result.stdout:
-            print(f"Migration output: {result.stdout}")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Migration failed: {e.stderr}")
-        return False
+        # Import and run the direct table creation
+        from create_tables_direct import create_tables
+        return create_tables()
     except Exception as e:
-        print(f"❌ Migration error: {e}")
+        print(f"❌ Table creation error: {e}")
         return False
 
 if __name__ == "__main__":
