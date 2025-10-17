@@ -24,7 +24,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["health"])  # liveness probe
     async def health_check() -> dict:
-        return {"status": "ok"}
+        return {"status": "ok", "message": "ReferConnect API is running"}
 
     app.include_router(api_router_v1, prefix="/api/v1")
 
