@@ -129,7 +129,7 @@ export function Header() {
                   {showProfileMenu && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
                       <Link
-                        to="/profile"
+                        to={user.role === 'employee' ? '/employee-profile' : '/profile'}
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setShowProfileMenu(false)}
                       >
@@ -137,7 +137,7 @@ export function Header() {
                         Profile & Settings
                       </Link>
                       <Link
-                        to="/profile"
+                        to={user.role === 'employee' ? '/employee-profile' : '/profile'}
                         className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         onClick={() => setShowProfileMenu(false)}
                       >

@@ -34,19 +34,29 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = localStorage.getItem('refresh_token')
+        console.log('Attempting token refresh with refresh token:', refreshToken ? 'exists' : 'missing')
+        
         if (refreshToken) {
           const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
             refresh_token: refreshToken,
           })
 
-          const { access_token, refresh_token } = response.data as { access_token: string; refresh_token: string }
+          const { access_token, refresh_token: newRefreshToken } = response.data as { access_token: string; refresh_token: string }
           localStorage.setItem('access_token', access_token)
-          localStorage.setItem('refresh_token', refresh_token)
+          localStorage.setItem('refresh_token', newRefreshToken)
+          
+          console.log('Token refresh successful, retrying original request')
 
           originalRequest.headers.Authorization = `Bearer ${access_token}`
           return api(originalRequest)
+        } else {
+          console.log('No refresh token available, redirecting to login')
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          window.location.href = '/login'
         }
       } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError)
         // Refresh failed, redirect to login
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
@@ -62,6 +72,22 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (data: RegisterData) => api.post('/auth/register', data),
   login: (data: LoginData) => api.post('/auth/login', data),
+  refreshToken: async () => {
+    const refreshToken = localStorage.getItem('refresh_token')
+    if (!refreshToken) {
+      throw new Error('No refresh token available')
+    }
+    
+    const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+      refresh_token: refreshToken,
+    })
+    
+    const { access_token, refresh_token: newRefreshToken } = response.data as { access_token: string; refresh_token: string }
+    localStorage.setItem('access_token', access_token)
+    localStorage.setItem('refresh_token', newRefreshToken)
+    
+    return { access_token, refresh_token: newRefreshToken }
+  },
   refresh: (data: RefreshData) => api.post('/auth/refresh', data),
   me: () => api.get('/auth/me'),
 }
@@ -518,6 +544,13 @@ export interface ProfileUpdateData {
   bio?: string
   location?: string
   website?: string
+  // Company information fields
+  company_name?: string
+  company_industry?: string
+  company_email?: string
+  office_location?: string
+  department?: string
+  years_at_company?: number
 }
 
 export interface JobSeekerProfileUpdateData {
@@ -617,6 +650,13 @@ export interface ProfileResponse {
   website?: string
   is_email_verified: boolean
   is_active: boolean
+  // Company information fields
+  company_name?: string
+  company_industry?: string
+  company_email?: string
+  office_location?: string
+  department?: string
+  years_at_company?: number
 }
 
 export interface JobSeekerProfileResponse {
@@ -789,6 +829,13 @@ export interface ProfileUpdateData {
   bio?: string
   location?: string
   website?: string
+  // Company information fields
+  company_name?: string
+  company_industry?: string
+  company_email?: string
+  office_location?: string
+  department?: string
+  years_at_company?: number
 }
 
 export interface JobSeekerProfileUpdateData {

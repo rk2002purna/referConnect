@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useProfileCompletion } from '../contexts/ProfileCompletionContext'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
@@ -42,6 +43,7 @@ import {
 } from 'lucide-react'
 
 export function Profile() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { refreshCompletionStatus } = useProfileCompletion()
   const [loading, setLoading] = useState(true)
@@ -158,6 +160,107 @@ export function Profile() {
     excludedCompanies: []
   })
 
+  // Function to load profile data
+  const loadProfileData = async () => {
+    // Only load data if user is authenticated
+    if (!user) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Load basic profile
+      const profileResponse = await profileAPI.getProfile()
+      const profile = profileResponse.data as ProfileResponse
+      setProfile(profile)
+      
+      // Load role-specific profile
+      if (user.role === 'jobseeker') {
+        try {
+          const jobseekerResponse = await profileAPI.getJobSeekerProfile()
+          const jobseekerProfile = jobseekerResponse.data as JobSeekerProfileResponse
+          setJobseekerProfile(jobseekerProfile)
+        } catch (err) {
+          console.log('No jobseeker profile found, will create one')
+        }
+      } else if (user.role === 'employee') {
+        try {
+          const employeeResponse = await profileAPI.getEmployeeProfile()
+          const employeeProfile = employeeResponse.data as EmployeeProfileResponse
+          setEmployeeProfile(employeeProfile)
+        } catch (err) {
+          console.log('No employee profile found, will create one')
+        }
+      }
+      
+      // Load completion status
+      try {
+        const completionResponse = await profileAPI.getProfileCompletion()
+        const completionData = completionResponse.data as ProfileCompletionResponse
+        setCompletion(completionData)
+      } catch (err) {
+        console.log('No completion data found')
+      }
+      
+      // Load experience data
+      try {
+        const experienceResponse = await profileAPI.getExperience()
+        const experienceData = experienceResponse.data.map((exp) => ({
+          id: exp.id.toString(),
+          title: exp.title,
+          company: exp.company,
+          start_date: exp.start_date,
+          end_date: exp.end_date || null,
+          description: exp.description || null,
+          current: exp.current
+        }))
+        setExperience(experienceData)
+      } catch (err) {
+        console.log('No experience data found')
+      }
+      
+      // Load education data
+      try {
+        const educationResponse = await profileAPI.getEducation()
+        const educationData = educationResponse.data.map((edu) => ({
+          id: edu.id.toString(),
+          degree: edu.degree,
+          school: edu.school,
+          start_date: edu.start_date,
+          end_date: edu.end_date,
+          description: edu.description || null
+        }))
+        setEducation(educationData)
+      } catch (err) {
+        console.log('No education data found')
+      }
+      
+      // Load certifications data
+      try {
+        const certificationsResponse = await profileAPI.getCertifications()
+        const certificationsData = certificationsResponse.data.map((cert) => ({
+          id: cert.id.toString(),
+          name: cert.name,
+          issuer: cert.issuer,
+          date: cert.date,
+          credential_id: cert.credential_id || null
+        }))
+        setCertifications(certificationsData)
+      } catch (err) {
+        console.log('No certifications data found')
+      }
+      
+    } catch (err: any) {
+      console.error('Failed to load profile data:', err)
+      setError('Failed to load profile data')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     // Debug authentication status
     const token = localStorage.getItem('access_token')
@@ -172,6 +275,19 @@ export function Profile() {
   useEffect(() => {
     console.log('Completion state updated:', completion)
   }, [completion])
+
+  // Redirect employees to the new EmployeeProfile page
+  useEffect(() => {
+    if (user && user.role === 'employee') {
+      navigate('/employee-profile', { replace: true })
+      return
+    }
+  }, [user, navigate])
+
+  // Don't render anything if user is an employee (will be redirected)
+  if (user && user.role === 'employee') {
+    return null
+  }
 
   // Function to refresh completion data
   const refreshCompletionData = async () => {
@@ -202,165 +318,9 @@ export function Profile() {
     }
   }
 
-  const loadProfileData = async () => {
-    // Only load data if user is authenticated
-    if (!user) {
-      setLoading(false)
-      return
-    }
-
-    try {
-      setLoading(true)
-      setError(null)
-
-      // Load basic profile
-      try {
-        const profileResponse = await profileAPI.getProfile()
-        setProfile(profileResponse.data as ProfileResponse)
-      } catch (err) {
-        console.error('Failed to load basic profile:', err)
-        setError('Failed to load profile data')
-        return
-      }
-
-      // Load role-specific profile
-      if (user?.role === 'jobseeker') {
-        try {
-          const jobseekerResponse = await profileAPI.getJobSeekerProfile()
-          const jobseekerData = jobseekerResponse.data as JobSeekerProfileResponse
-          setJobseekerProfile(jobseekerData)
-          
-          // Parse job seeker specific data
-          if (jobseekerData.skills) {
-            setSkills(jobseekerData.skills.split(',').filter(s => s.trim()).map(skill => ({
-              name: skill,
-              proficiency: 4 // Default proficiency level
-            })))
-          }
-          if (jobseekerData.privacy_excluded_companies) {
-            setExcludedCompanies(jobseekerData.privacy_excluded_companies.split(',').filter(c => c.trim()))
-          }
-        } catch (err) {
-          // Jobseeker profile might not exist yet - this is normal
-          console.log('No jobseeker profile found - will be created when needed')
-        }
-      } else if (user?.role === 'employee') {
-        try {
-          const employeeResponse = await profileAPI.getEmployeeProfile()
-          setEmployeeProfile(employeeResponse.data as EmployeeProfileResponse)
-        } catch (err) {
-          // Employee profile might not exist yet - this is normal
-          console.log('No employee profile found - will be created when needed')
-        }
-      }
-
-      // Load profile completion data
-      try {
-        console.log('Loading profile completion data...')
-        console.log('Current token for completion:', localStorage.getItem('access_token'))
-        
-        // Use direct fetch to bypass any API wrapper issues
-        const response = await fetch('http://localhost:8000/api/v1/profile/me/completion', {
-          headers: {
-            'Authorization': 'Bearer ' + localStorage.getItem('access_token'),
-            'Content-Type': 'application/json'
-          }
-        })
-        
-        console.log('Completion API response status:', response.status)
-        
-        if (response.ok) {
-          const data = await response.json()
-          console.log('Completion API response data:', data)
-          setCompletion(data as ProfileCompletionResponse)
-          console.log('Completion data set successfully')
-        } else {
-          const errorData = await response.json()
-          console.error('Completion API call failed:', errorData)
-          setCompletion({
-            basic_info_completion: 0,
-            jobseeker_completion: 0,
-            employee_completion: 0,
-            overall_completion: 0,
-            missing_fields: [],
-            is_complete: false
-          })
-        }
-      } catch (err) {
-        console.error('Failed to load profile completion:', err)
-        console.error('Error details:', err)
-        // Set default completion if API fails
-        setCompletion({
-          basic_info_completion: 0,
-          jobseeker_completion: 0,
-          employee_completion: 0,
-          overall_completion: 0,
-          missing_fields: [],
-          is_complete: false
-        })
-      }
-
-      // Load experience data
-      try {
-        console.log('Loading experience data...')
-        const experienceResponse = await profileAPI.getExperience()
-        console.log('Experience response:', experienceResponse)
-        const experienceData = experienceResponse.data.map((exp) => ({
-          id: exp.id.toString(),
-          title: exp.title,
-          company: exp.company,
-          start_date: exp.start_date,
-          end_date: exp.end_date || null,
-          description: exp.description || null,
-          current: exp.current
-        }))
-        setExperience(experienceData)
-      } catch (err) {
-        console.error('Failed to load experience:', err)
-        setExperience([])
-      }
-
-      // Load education data
-      try {
-        const educationResponse = await profileAPI.getEducation()
-        const educationData = educationResponse.data.map((edu) => ({
-          id: edu.id.toString(),
-          degree: edu.degree,
-          school: edu.school,
-          start_date: edu.start_date,
-          end_date: edu.end_date,
-          description: edu.description || null
-        }))
-        setEducation(educationData)
-      } catch (err) {
-        console.error('Failed to load education:', err)
-        setEducation([])
-      }
-
-      // Load certifications data
-      try {
-        const certificationsResponse = await profileAPI.getCertifications()
-        const certificationsData = certificationsResponse.data.map((cert) => ({
-          id: cert.id.toString(),
-          name: cert.name,
-          issuer: cert.issuer,
-          date: cert.date,
-          credential_id: cert.credential_id || null
-        }))
-        setCertifications(certificationsData)
-      } catch (err) {
-        console.error('Failed to load certifications:', err)
-        setCertifications([])
-      }
 
 
-    } catch (err: any) {
-      console.error('Failed to load profile:', err)
-      setError('Failed to load profile data')
-    } finally {
-      setLoading(false)
-    }
-  }
+
 
 
   const handleEdit = () => {

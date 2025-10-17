@@ -13,7 +13,6 @@ import {
   Calendar,
   User,
   Star,
-  AlertCircle,
   RefreshCw
 } from 'lucide-react'
 

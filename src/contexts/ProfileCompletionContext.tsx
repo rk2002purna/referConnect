@@ -42,15 +42,88 @@ export function ProfileCompletionProvider({ children }: ProfileCompletionProvide
       setCompletionStatus(response.data as ProfileCompletionResponse)
     } catch (error) {
       console.error('Failed to fetch profile completion status:', error)
-      // Fallback: assume profile is complete if API fails
-      setCompletionStatus({
-        basic_info_completion: 100,
-        jobseeker_completion: 100,
-        employee_completion: 100,
-        overall_completion: 100,
-        missing_fields: [],
-        is_complete: true
-      })
+      
+      // For employees, check verification status before assuming completion
+      if (user.role === 'employee') {
+        try {
+          const { verificationAPI } = await import('../lib/api')
+          const verificationResponse = await verificationAPI.getStatus()
+          const verificationStatus = verificationResponse.data
+          console.log('Verification status for employee:', verificationStatus)
+          
+          // If employee is verified, consider profile complete
+          if (verificationStatus.status === 'verified') {
+            console.log('Employee is verified, marking profile as complete')
+            setCompletionStatus({
+              basic_info_completion: 100,
+              jobseeker_completion: 0,
+              employee_completion: 100,
+              overall_completion: 100,
+              missing_fields: [],
+              is_complete: true
+            })
+          } else {
+            console.log('Employee not verified, marking profile as incomplete')
+            // Employee not verified, profile incomplete
+            setCompletionStatus({
+              basic_info_completion: 50,
+              jobseeker_completion: 0,
+              employee_completion: 0,
+              overall_completion: 25,
+              missing_fields: ['verification'],
+              is_complete: false
+            })
+          }
+        } catch (verificationError) {
+          console.error('Failed to check verification status:', verificationError)
+          
+          // Check localStorage for onboarding completion flag
+          const onboardingCompleted = localStorage.getItem('onboarding_completed') === 'true'
+          const onboardingRole = localStorage.getItem('onboarding_completed_role')
+          
+          if (onboardingCompleted && onboardingRole === 'employee') {
+            console.log('Using localStorage workaround: Employee onboarding marked as completed')
+            setCompletionStatus({
+              basic_info_completion: 100,
+              jobseeker_completion: 0,
+              employee_completion: 100,
+              overall_completion: 100,
+              missing_fields: [],
+              is_complete: true
+            })
+          } else if (user.first_name && user.last_name && user.email) {
+            console.log('Using fallback: Employee has basic data, assuming profile complete')
+            setCompletionStatus({
+              basic_info_completion: 100,
+              jobseeker_completion: 0,
+              employee_completion: 100,
+              overall_completion: 100,
+              missing_fields: [],
+              is_complete: true
+            })
+          } else {
+            // If we can't check verification, assume incomplete for employees
+            setCompletionStatus({
+              basic_info_completion: 50,
+              jobseeker_completion: 0,
+              employee_completion: 0,
+              overall_completion: 25,
+              missing_fields: ['verification'],
+              is_complete: false
+            })
+          }
+        }
+      } else {
+        // For job seekers, use the original fallback
+        setCompletionStatus({
+          basic_info_completion: 100,
+          jobseeker_completion: 100,
+          employee_completion: 0,
+          overall_completion: 100,
+          missing_fields: [],
+          is_complete: true
+        })
+      }
     } finally {
       setLoading(false)
     }

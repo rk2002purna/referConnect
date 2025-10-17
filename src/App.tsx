@@ -11,9 +11,11 @@ import { JobSearch } from './pages/JobSearch'
 import { MyApplications } from './pages/MyApplications'
 import { MyReferrals } from './pages/MyReferrals'
 import { Profile } from './pages/Profile'
+import { EmployeeProfile } from './pages/EmployeeProfile'
 import PostJob from './pages/PostJob'
 import { EmployeeDashboard } from './pages/EmployeeDashboard'
 import { Debug } from './pages/Debug'
+import TokenDebug from './pages/TokenDebug'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 // Protected Route component
@@ -33,9 +35,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
-  // Allow access to profile page and debug page even if onboarding is incomplete
+  // Allow access to profile page, debug page, and post-job page even if onboarding is incomplete
   const currentPath = window.location.pathname
-  if (!isOnboardingComplete && currentPath !== '/profile' && currentPath !== '/onboarding' && currentPath !== '/debug') {
+  
+  // Check localStorage for onboarding completion as fallback
+  const onboardingCompleted = localStorage.getItem('onboarding_completed') === 'true'
+  const onboardingRole = localStorage.getItem('onboarding_completed_role')
+  const shouldSkipOnboarding = isOnboardingComplete || (onboardingCompleted && onboardingRole === user?.role)
+  
+  if (!shouldSkipOnboarding && currentPath !== '/profile' && currentPath !== '/onboarding' && currentPath !== '/debug' && currentPath !== '/post-job') {
     return <Navigate to="/onboarding" replace />
   }
 
@@ -45,8 +53,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 // Public Route component (redirect to dashboard if already logged in)
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
+  const { isOnboardingComplete, loading: completionLoading } = useProfileCompletion()
 
-  if (loading) {
+  if (loading || completionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -55,9 +64,14 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (user) {
-    // Redirect based on user role
-    const redirectPath = user.role === 'jobseeker' ? '/search' : '/dashboard'
-    return <Navigate to={redirectPath} replace />
+    // Check if onboarding is complete before redirecting
+    if (!isOnboardingComplete) {
+      return <Navigate to="/onboarding" replace />
+    }
+    
+        // Redirect based on user role
+        const redirectPath = user.role === 'jobseeker' ? '/search' : '/post-job'
+        return <Navigate to={redirectPath} replace />
   }
 
   return <>{children}</>
@@ -135,6 +149,14 @@ function App() {
                   } 
                 />
                 <Route 
+                  path="/employee-profile" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout><EmployeeProfile /></Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
                   path="/post-job" 
                   element={
                     <ProtectedRoute>
@@ -155,6 +177,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Layout><Debug /></Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/token-debug" 
+                  element={
+                    <ProtectedRoute>
+                      <TokenDebug />
                     </ProtectedRoute>
                   } 
                 />

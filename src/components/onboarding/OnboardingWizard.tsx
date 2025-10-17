@@ -195,6 +195,8 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   const handleComplete = async () => {
     setIsSubmitting(true)
     try {
+      console.log('Completing onboarding with data:', data)
+      
       // Save basic profile information
       await profileAPI.updateProfile({
         first_name: data.first_name,
@@ -220,14 +222,48 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
         })
       }
 
+      // Save verification status for employees
+      if (user?.role === 'employee' && data.verification) {
+        try {
+          console.log('Saving verification status:', {
+            status: data.verification.status || 'verified',
+            method: data.verification.method,
+            company_id: data.verification.company_id
+          })
+          
+          await verificationAPI.updateStatus({
+            status: data.verification.status || 'verified',
+            method: data.verification.method,
+            company_id: data.verification.company_id
+          })
+          console.log('Verification status updated successfully')
+        } catch (verificationError) {
+          console.error('Failed to update verification status:', verificationError)
+          // Don't fail the entire onboarding if verification update fails
+          // The verification might already be saved from the verification steps
+        }
+      }
+
+      // Mark onboarding as completed in localStorage
+      localStorage.setItem('onboarding_completed', 'true')
+      localStorage.setItem('onboarding_completed_role', user?.role || '')
+      console.log('Onboarding marked as completed in localStorage')
+
       // Refresh profile completion status
       await refreshCompletionStatus()
+      
+      // Add a small delay to ensure completion status is updated
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Set onboarding completion in localStorage
+      localStorage.setItem('onboarding_completed', 'true')
+      localStorage.setItem('onboarding_completed_role', user?.role || '')
       
       // Redirect based on role
       if (user?.role === 'jobseeker') {
         navigate('/search')
       } else {
-        navigate('/dashboard')
+        navigate('/post-job')
       }
     } catch (error) {
       console.error('Failed to save profile:', error)

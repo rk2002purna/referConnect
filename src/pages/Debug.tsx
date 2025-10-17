@@ -40,6 +40,19 @@ export function Debug() {
         </CardContent>
       </Card>
 
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>LocalStorage Debug</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <p><strong>onboarding_completed:</strong> {localStorage.getItem('onboarding_completed') || 'null'}</p>
+            <p><strong>onboarding_completed_role:</strong> {localStorage.getItem('onboarding_completed_role') || 'null'}</p>
+            <p><strong>access_token:</strong> {localStorage.getItem('access_token') ? 'Present' : 'Missing'}</p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
@@ -47,6 +60,17 @@ export function Debug() {
         <CardContent className="space-y-4">
           <Button onClick={handleForceComplete} className="w-full">
             Force Complete Onboarding
+          </Button>
+          <Button 
+            onClick={() => {
+              localStorage.setItem('onboarding_completed', 'true')
+              localStorage.setItem('onboarding_completed_role', user?.role || '')
+              window.location.reload()
+            }} 
+            className="w-full"
+            variant="outline"
+          >
+            Mark Onboarding Complete in localStorage
           </Button>
           <Button 
             variant="outline" 

@@ -45,3 +45,5 @@ CREATE INDEX IF NOT EXISTS idx_verified_companies_industry ON verified_companies
 
 
 
+
+
