@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
+"""
+Direct table creation script for PostgreSQL
+This bypasses Alembic's async issues and creates tables directly
+"""
 import os
 import sys
-import subprocess
-import uvicorn
 from sqlalchemy import create_engine, text
-from app.main import create_app
 from app.core.config import settings
 
-def run_migrations():
-    """Run database table creation"""
-    print("🔄 Creating database tables...")
+def create_tables():
+    """Create all necessary tables directly"""
+    print("🔄 Creating database tables directly...")
+    
     try:
         # Get database URL
         database_url = os.getenv("DATABASE_URL", settings.DATABASE_URL)
@@ -180,26 +182,5 @@ def run_migrations():
         return False
 
 if __name__ == "__main__":
-    # Get port from environment variable, default to 8000
-    port = int(os.getenv("PORT", 8000))
-    host = "0.0.0.0"
-    
-    print(f"🚀 Starting ReferConnect API on {host}:{port}")
-    print(f"📊 Environment: {os.getenv('ENVIRONMENT', 'development')}")
-    
-    # Check if DATABASE_URL is set
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        print("❌ DATABASE_URL environment variable not set!")
-        print("Skipping migrations and starting server...")
-    else:
-        print(f"📊 Using database: {database_url}")
-        # Run migrations
-        if not run_migrations():
-            print("⚠️  Migrations failed, but continuing with server startup...")
-    
-    # Create the app
-    app = create_app()
-    
-    # Run the app
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    success = create_tables()
+    sys.exit(0 if success else 1)
