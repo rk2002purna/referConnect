@@ -46,9 +46,8 @@ export function Debug() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            <p><strong>onboarding_completed:</strong> {localStorage.getItem('onboarding_completed') || 'null'}</p>
-            <p><strong>onboarding_completed_role:</strong> {localStorage.getItem('onboarding_completed_role') || 'null'}</p>
             <p><strong>access_token:</strong> {localStorage.getItem('access_token') ? 'Present' : 'Missing'}</p>
+            <p><strong>Note:</strong> Onboarding completion is now tracked server-side</p>
           </div>
         </CardContent>
       </Card>
@@ -63,14 +62,13 @@ export function Debug() {
           </Button>
           <Button 
             onClick={() => {
-              localStorage.setItem('onboarding_completed', 'true')
-              localStorage.setItem('onboarding_completed_role', user?.role || '')
-              window.location.reload()
+              // Note: Onboarding completion is now server-side, this button is deprecated
+              alert('Onboarding completion is now tracked server-side. Complete your profile to finish onboarding.')
             }} 
             className="w-full"
             variant="outline"
           >
-            Mark Onboarding Complete in localStorage
+            Mark Onboarding Complete (Deprecated)
           </Button>
           <Button 
             variant="outline" 

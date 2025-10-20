@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug localStorage</title>
+</head>
+<body>
+    <h1>Debug localStorage</h1>
+    <div id="output"></div>
+    
+    <script>
+        function checkLocalStorage() {
+            const onboardingCompleted = localStorage.getItem('onboarding_completed');
+            const onboardingRole = localStorage.getItem('onboarding_completed_role');
+            
+            document.getElementById('output').innerHTML = `
+                <p>onboarding_completed: ${onboardingCompleted}</p>
+                <p>onboarding_completed_role: ${onboardingRole}</p>
+                <p>Both set: ${onboardingCompleted === 'true' && onboardingRole}</p>
+            `;
+        }
+        
+        checkLocalStorage();
+        
+        // Check every second
+        setInterval(checkLocalStorage, 1000);
+    </script>
+</body>
+</html>
+
+

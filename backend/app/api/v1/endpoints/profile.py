@@ -48,7 +48,12 @@ def get_jobseeker_profile(
         raise HTTPException(status_code=403, detail="Access denied. Jobseeker profile only.")
     
     service = ProfileService(db)
-    return service.get_jobseeker_profile(current_user.id)
+    profile = service.get_jobseeker_profile(current_user.id)
+    
+    if not profile:
+        raise HTTPException(status_code=404, detail="Jobseeker profile not found")
+    
+    return profile
 
 
 @router.put("/me/jobseeker", response_model=JobSeekerProfileResponse)
@@ -119,6 +124,40 @@ def upload_resume(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload resume: {str(e)}")
+
+
+@router.get("/me/resume")
+def get_resume(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    """Get current user's resume information"""
+    if current_user.role.value != 'jobseeker':
+        raise HTTPException(status_code=403, detail="Access denied. Resume access for jobseekers only.")
+    
+    service = ProfileService(db)
+    try:
+        result = service.get_resume_info(current_user.id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get resume info: {str(e)}")
+
+
+@router.delete("/me/resume")
+def delete_resume(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    """Delete current user's resume"""
+    if current_user.role.value != 'jobseeker':
+        raise HTTPException(status_code=403, detail="Access denied. Resume deletion for jobseekers only.")
+    
+    service = ProfileService(db)
+    try:
+        result = service.delete_resume(current_user.id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete resume: {str(e)}")
 
 
 @router.get("/me/completion", response_model=ProfileCompletionResponse)

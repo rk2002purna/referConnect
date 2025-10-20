@@ -3,7 +3,6 @@ import BasicInfoStep from '../components/onboarding/BasicInfoStep'
 import SkillsExperienceStep from '../components/onboarding/SkillsExperienceStep'
 import LocationPreferencesStep from '../components/onboarding/LocationPreferencesStep'
 import AdditionalInfoStep from '../components/onboarding/AdditionalInfoStep'
-import ResumeUploadStep from '../components/onboarding/ResumeUploadStep'
 import CompanyInfoStep from '../components/onboarding/CompanyInfoStep'
 import ReferralPreferencesStep from '../components/onboarding/ReferralPreferencesStep'
 
@@ -22,6 +21,7 @@ export interface OnboardingData {
   last_name: string
   email: string
   phone?: string
+  phone_country_code?: string
   location?: string
   bio?: string
   
@@ -65,6 +65,8 @@ export interface OnboardingData {
     linkedin_url?: string
     github_url?: string
     resume_filename?: string
+    resume_url?: string
+    resume_key?: string
     privacy_excluded_companies?: string[]
   }
   
@@ -174,13 +176,6 @@ export const JOB_SEEKER_STEPS: OnboardingStep[] = [
     title: 'Additional Information',
     description: 'Optional details to improve your profile',
     component: AdditionalInfoStep,
-    isRequired: false
-  },
-  {
-    id: 'resume-upload',
-    title: 'Resume & Portfolio',
-    description: 'Upload your resume and portfolio links',
-    component: ResumeUploadStep,
     isRequired: false
   }
 ]

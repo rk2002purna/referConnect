@@ -51,6 +51,7 @@ export function CompanySearchStep({ onCompanySelect, onPrevious, onNext }: Compa
     { id: 18, name: 'Adobe', domain: 'adobe.com', industry: 'Technology', size: '1,000-10,000', verified: true },
     { id: 19, name: 'Spotify', domain: 'spotify.com', industry: 'Entertainment', size: '1,000-10,000', verified: true },
     { id: 20, name: 'Zoom', domain: 'zoom.us', industry: 'Technology', size: '1,000-10,000', verified: true },
+    { id: 21, name: 'NRLord', domain: 'nrlord.com', industry: 'Technology', size: '1-100', verified: true },
   ]
 
   // Fetch companies from API

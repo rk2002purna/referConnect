@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { RequestReferralModal } from '../components/RequestReferralModal'
 import { ProfileCompletionBanner } from '../components/ProfileCompletionBanner'
+import { jobPostAPI, profileAPI } from '../lib/api'
 import { 
   Search, 
   MapPin, 
@@ -13,26 +14,50 @@ import {
   Filter,
   Users,
   Calendar,
-  UserPlus
+  UserPlus,
+  Loader2
 } from 'lucide-react'
+import { JobMatchingService, JobSeekerProfile, JobMatch } from '../services/jobMatchingService'
+import { useAuth } from '../contexts/AuthContext'
 
 interface Job {
   id: number
   title: string
   company: string
   location: string
-  employment_type: string
-  skills: string[]
-  min_experience: number
+  job_type: string
+  skills_required: string[]
+  experience_level: string
   description: string
-  created_at: string
-  is_active: boolean
+  requirements?: string
+  benefits?: string
+  salary_min?: number
+  salary_max?: number
+  currency: string
+  remote_work: boolean
+  application_deadline?: string
+  contact_email: string
+  department?: string
   job_link?: string
   max_applicants?: number
-  current_applicants?: number
+  is_active: boolean
+  views: number
+  applications_count: number
+  created_at: string
+  updated_at: string
+  posted_by: number
+}
+
+interface JobPostListResponse {
+  jobs: Job[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
 }
 
 export function JobSearch() {
+  const { user } = useAuth()
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -41,86 +66,118 @@ export function JobSearch() {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [showReferralModal, setShowReferralModal] = useState(false)
+  const [matches, setMatches] = useState<Record<number, JobMatch>>({})
+  const [jobseekerProfile, setJobseekerProfile] = useState<JobSeekerProfile | null>(null)
+
+  // Load jobseeker profile for accurate matching
+  useEffect(() => {
+    const loadJobseekerProfile = async () => {
+      if (!user || user.role !== 'jobseeker') {
+        setJobseekerProfile(null)
+        return
+      }
+
+      try {
+        const response = await profileAPI.getJobSeekerProfile()
+        const profile = response.data as any
+        
+        // Convert API response to JobSeekerProfile format
+        const jobSeeker: JobSeekerProfile = {
+          id: user.id,
+          skills: profile.skills ? profile.skills.split(',').map((s: string) => s.trim()) : [],
+          experience_level: profile.years_experience ? 
+            (profile.years_experience < 2 ? 'entry' : 
+             profile.years_experience < 5 ? 'mid' : 
+             profile.years_experience < 10 ? 'senior' : 'executive') : 'mid',
+          preferred_job_types: profile.preferred_job_types ? 
+            profile.preferred_job_types.split(',').map((s: string) => s.trim()) : [],
+          location: profile.location || '',
+          salary_expectation_min: profile.salary_expectation_min,
+          salary_expectation_max: profile.salary_expectation_max,
+          industries: profile.industries ? 
+            profile.industries.split(',').map((s: string) => s.trim()) : [],
+          willing_to_relocate: profile.willing_to_relocate ?? true,
+        }
+        setJobseekerProfile(jobSeeker)
+      } catch (error) {
+        console.error('Failed to load jobseeker profile:', error)
+        setJobseekerProfile(null)
+      }
+    }
+
+    loadJobseekerProfile()
+  }, [user])
 
   useEffect(() => {
-    // Mock data - in a real app, this would be an API call
-    const mockJobs: Job[] = [
-      {
-        id: 1,
-        title: 'Senior Software Engineer',
-        company: 'TechCorp',
-        location: 'San Francisco, CA',
-        employment_type: 'full_time',
-        skills: ['Python', 'React', 'AWS', 'Docker'],
-        min_experience: 5,
-        description: 'We are looking for a senior software engineer to join our team...',
-        created_at: '2024-01-15',
-        is_active: true,
-        job_link: 'https://techcorp.com/careers/senior-software-engineer',
-        max_applicants: 50,
-        current_applicants: 23
-      },
-      {
-        id: 2,
-        title: 'Product Manager',
-        company: 'StartupXYZ',
-        location: 'Remote',
-        employment_type: 'full_time',
-        skills: ['Product Management', 'Agile', 'Analytics'],
-        min_experience: 3,
-        description: 'Lead product development for our flagship application...',
-        created_at: '2024-01-14',
-        is_active: true,
-        job_link: 'https://startupxyz.com/jobs/product-manager',
-        max_applicants: 30,
-        current_applicants: 15
-      },
-      {
-        id: 3,
-        title: 'Data Scientist',
-        company: 'DataCorp',
-        location: 'New York, NY',
-        employment_type: 'full_time',
-        skills: ['Python', 'Machine Learning', 'SQL', 'Statistics'],
-        min_experience: 4,
-        description: 'Join our data science team to build ML models...',
-        created_at: '2024-01-13',
-        is_active: true,
-        job_link: 'https://datacorp.com/careers/data-scientist',
-        max_applicants: 25,
-        current_applicants: 25
-      },
-      {
-        id: 4,
-        title: 'Frontend Developer',
-        company: 'WebSolutions',
-        location: 'Austin, TX',
-        employment_type: 'contract',
-        skills: ['React', 'TypeScript', 'CSS', 'JavaScript'],
-        min_experience: 2,
-        description: 'Build beautiful and responsive user interfaces...',
-        created_at: '2024-01-12',
-        is_active: true,
-        job_link: 'https://websolutions.com/careers/frontend-developer',
-        max_applicants: 40,
-        current_applicants: 8
+    const fetchJobs = async () => {
+      try {
+        setLoading(true)
+        const response = await jobPostAPI.getJobPosts({
+          page: 1,
+          per_page: 50,
+          job_type: employmentTypeFilter || undefined,
+          location: locationFilter || undefined,
+          experience_level: undefined
+        })
+        const data = response.data as JobPostListResponse
+        setJobs(data.jobs)
+        
+        // Compute client-side matches when jobs load and profile is available
+        if (jobseekerProfile) {
+          try {
+            const computed: Record<number, JobMatch> = {}
+            for (const job of data.jobs) {
+              const jobPost = {
+                id: job.id,
+                title: job.title,
+                company: job.company,
+                location: job.location,
+                job_type: job.job_type,
+                skills_required: job.skills_required || [],
+                experience_level: job.experience_level,
+                salary_min: job.salary_min,
+                salary_max: job.salary_max,
+                description: job.description,
+                is_active: job.is_active,
+                created_at: job.created_at,
+              }
+              const match = JobMatchingService.calculateMatchScore(jobseekerProfile, jobPost)
+              computed[job.id] = match
+            }
+            setMatches(computed)
+          } catch (e) {
+            console.error('Failed to compute job matches:', e)
+            setMatches({})
+          }
+        } else {
+          setMatches({})
+        }
+      } catch (error) {
+        console.error('Failed to fetch jobs:', error)
+        // Fallback to empty array on error
+        setJobs([])
+      } finally {
+        setLoading(false)
       }
-    ]
+    }
 
-    setTimeout(() => {
-      setJobs(mockJobs)
-      setLoading(false)
-    }, 1000)
-  }, [])
+    fetchJobs()
+  }, [employmentTypeFilter, locationFilter, jobseekerProfile])
 
   const filteredJobs = jobs.filter(job => {
     const matchesSearch = job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         job.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()))
+                         job.skills_required.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()))
     const matchesLocation = !locationFilter || job.location.toLowerCase().includes(locationFilter.toLowerCase())
-    const matchesEmploymentType = !employmentTypeFilter || job.employment_type === employmentTypeFilter
+    const matchesEmploymentType = !employmentTypeFilter || job.job_type === employmentTypeFilter
 
     return matchesSearch && matchesLocation && matchesEmploymentType
+  })
+  // Sort by match score descending when available
+  const sortedJobs = [...filteredJobs].sort((a, b) => {
+    const aScore = matches[a.id]?.matchScore ?? -1
+    const bScore = matches[b.id]?.matchScore ?? -1
+    return bScore - aScore
   })
 
   const handleSearch = (e: React.FormEvent) => {
@@ -130,8 +187,8 @@ export function JobSearch() {
 
   const getEmploymentTypeLabel = (type: string) => {
     switch (type) {
-      case 'full_time': return 'Full Time'
-      case 'part_time': return 'Part Time'
+      case 'full-time': return 'Full Time'
+      case 'part-time': return 'Part Time'
       case 'contract': return 'Contract'
       case 'internship': return 'Internship'
       default: return type
@@ -148,12 +205,12 @@ export function JobSearch() {
 
   const isJobAcceptingApplications = (job: Job) => {
     if (!job.max_applicants) return true // No limit set
-    return (job.current_applicants || 0) < job.max_applicants
+    return job.applications_count < job.max_applicants
   }
 
   const getApplicantStatus = (job: Job) => {
     if (!job.max_applicants) return null
-    const current = job.current_applicants || 0
+    const current = job.applications_count
     const max = job.max_applicants
     return { current, max, remaining: max - current }
   }
@@ -161,7 +218,7 @@ export function JobSearch() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -235,8 +292,8 @@ export function JobSearch() {
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <option value="">All Types</option>
-                    <option value="full_time">Full Time</option>
-                    <option value="part_time">Part Time</option>
+                    <option value="full-time">Full Time</option>
+                    <option value="part-time">Part Time</option>
                     <option value="contract">Contract</option>
                     <option value="internship">Internship</option>
                   </select>
@@ -251,11 +308,11 @@ export function JobSearch() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-600">
-            {filteredJobs.length} job{filteredJobs.length !== 1 ? 's' : ''} found
+            {sortedJobs.length} job{sortedJobs.length !== 1 ? 's' : ''} found
           </p>
         </div>
 
-        {filteredJobs.length === 0 ? (
+        {sortedJobs.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
               <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -267,7 +324,7 @@ export function JobSearch() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {filteredJobs.map((job) => (
+            {sortedJobs.map((job) => (
               <Card key={job.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
@@ -276,8 +333,13 @@ export function JobSearch() {
                         <h3 className="text-lg font-semibold text-gray-900">
                           {job.title}
                         </h3>
+                        {matches[job.id] && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {Math.round(matches[job.id].matchScore * 100)}% match
+                          </span>
+                        )}
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          {getEmploymentTypeLabel(job.employment_type)}
+                          {getEmploymentTypeLabel(job.job_type)}
                         </span>
                       </div>
                       
@@ -292,7 +354,7 @@ export function JobSearch() {
                         </div>
                         <div className="flex items-center space-x-1">
                           <Clock className="w-4 h-4" />
-                          <span>{job.min_experience}+ years</span>
+                          <span>{job.experience_level}</span>
                         </div>
                       </div>
 
@@ -301,7 +363,7 @@ export function JobSearch() {
                       </p>
 
                       <div className="flex flex-wrap gap-2 mb-4">
-                        {job.skills.map((skill, index) => (
+                        {job.skills_required.map((skill, index) => (
                           <span
                             key={index}
                             className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"

@@ -34,11 +34,17 @@ class User(TimestampedModel, table=True):
     first_name: Optional[str] = Field(default=None, nullable=True)
     last_name: Optional[str] = Field(default=None, nullable=True)
     phone: Optional[str] = Field(default=None, nullable=True)
+    phone_country_code: Optional[str] = Field(default='+91', nullable=True)
     linkedin_url: Optional[str] = Field(default=None, nullable=True)
     profile_picture: Optional[str] = Field(default=None, nullable=True)
     bio: Optional[str] = Field(default=None, nullable=True)
     location: Optional[str] = Field(default=None, nullable=True)
     website: Optional[str] = Field(default=None, nullable=True)
+    
+    # Resume fields
+    resume_filename: Optional[str] = Field(default=None, nullable=True)
+    resume_url: Optional[str] = Field(default=None, nullable=True)
+    resume_key: Optional[str] = Field(default=None, nullable=True)
 
     # Links - using simple relationships for now
     # employee_profile: Optional["Employee"] = Relationship(back_populates="user")
@@ -77,13 +83,43 @@ class JobSeeker(TimestampedModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)
+    
+    # Basic Info
     skills: Optional[str] = Field(default=None, description="Comma-separated skills")
     years_experience: Optional[int] = Field(default=None)
     current_company: Optional[str] = Field(default=None, max_length=255)
-    privacy_excluded_companies: Optional[str] = Field(default=None)
-    trust_score: int = Field(default=0)
+    current_job_title: Optional[str] = Field(default=None, max_length=255)
+    education: Optional[str] = Field(default=None, max_length=500)
+    certifications: Optional[str] = Field(default=None, description="Comma-separated certifications")
+    
+    # Job Preferences
+    preferred_job_types: Optional[str] = Field(default=None, description="Comma-separated job types")
+    salary_expectation_min: Optional[int] = Field(default=None)
+    salary_expectation_max: Optional[int] = Field(default=None)
+    salary_currency: Optional[str] = Field(default=None, max_length=10)
+    notice_period: Optional[int] = Field(default=None)
+    availability: Optional[str] = Field(default=None, max_length=100)
+    industries: Optional[str] = Field(default=None, description="Comma-separated industries")
+    willing_to_relocate: Optional[bool] = Field(default=None)
+    work_authorization: Optional[str] = Field(default=None, max_length=100)
+    
+    # Languages
+    languages: Optional[str] = Field(default=None, description="JSON string of languages and levels")
+    
+    # Portfolio & Links
+    portfolio_url: Optional[str] = Field(default=None, max_length=500)
+    linkedin_url: Optional[str] = Field(default=None, max_length=500)
+    github_url: Optional[str] = Field(default=None, max_length=500)
+    
+    # Resume
     resume_filename: Optional[str] = Field(default=None, max_length=255)
     resume_path: Optional[str] = Field(default=None, max_length=500)
+    
+    # Privacy
+    privacy_excluded_companies: Optional[str] = Field(default=None, description="Comma-separated company names")
+    
+    # Trust & Scoring
+    trust_score: int = Field(default=0)
 
     # user: User = Relationship(back_populates="jobseeker_profile")
 

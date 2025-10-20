@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onboarding Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Onboarding Persistence Fix Test</h1>
+    
+    <div class="test-section">
+        <h3>Test 1: Check Current localStorage State</h3>
+        <p><strong>onboarding_completed:</strong> <span id="onboarding-completed">Loading...</span></p>
+        <p><strong>onboarding_completed_role:</strong> <span id="onboarding-role">Loading...</span></p>
+        <button onclick="checkLocalStorage()">Refresh</button>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test 2: Simulate Completed Onboarding</h3>
+        <p>This will set the localStorage flags as if onboarding was completed:</p>
+        <button onclick="simulateCompletedOnboarding()">Simulate Employee Onboarding Complete</button>
+        <button onclick="simulateJobseekerOnboarding()">Simulate Jobseeker Onboarding Complete</button>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test 3: Clear Onboarding State</h3>
+        <p>This will clear the localStorage flags:</p>
+        <button onclick="clearOnboardingState()">Clear Onboarding State</button>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test 4: Test Navigation Logic</h3>
+        <p>This will test the navigation logic based on current state:</p>
+        <button onclick="testNavigationLogic()">Test Navigation</button>
+        <div id="navigation-result"></div>
+    </div>
+
+    <script>
+        function checkLocalStorage() {
+            document.getElementById('onboarding-completed').textContent = 
+                localStorage.getItem('onboarding_completed') || 'null';
+            document.getElementById('onboarding-role').textContent = 
+                localStorage.getItem('onboarding_completed_role') || 'null';
+        }
+        
+        function simulateCompletedOnboarding() {
+            localStorage.setItem('onboarding_completed', 'true');
+            localStorage.setItem('onboarding_completed_role', 'employee');
+            checkLocalStorage();
+            alert('Employee onboarding marked as completed!');
+        }
+        
+        function simulateJobseekerOnboarding() {
+            localStorage.setItem('onboarding_completed', 'true');
+            localStorage.setItem('onboarding_completed_role', 'jobseeker');
+            checkLocalStorage();
+            alert('Jobseeker onboarding marked as completed!');
+        }
+        
+        function clearOnboardingState() {
+            localStorage.removeItem('onboarding_completed');
+            localStorage.removeItem('onboarding_completed_role');
+            checkLocalStorage();
+            alert('Onboarding state cleared!');
+        }
+        
+        function testNavigationLogic() {
+            const onboardingCompleted = localStorage.getItem('onboarding_completed') === 'true';
+            const onboardingRole = localStorage.getItem('onboarding_completed_role');
+            
+            // Simulate user data
+            const mockUser = {
+                first_name: 'John',
+                last_name: 'Doe',
+                email: 'john@example.com',
+                role: onboardingRole || 'employee'
+            };
+            
+            const hasBasicInfo = mockUser.first_name && mockUser.last_name && mockUser.email;
+            const shouldSkipOnboarding = onboardingCompleted && onboardingRole === mockUser.role;
+            
+            const result = `
+                <h4>Navigation Test Results:</h4>
+                <p><strong>User:</strong> ${mockUser.first_name} ${mockUser.last_name} (${mockUser.role})</p>
+                <p><strong>Has Basic Info:</strong> ${hasBasicInfo}</p>
+                <p><strong>Onboarding Completed:</strong> ${onboardingCompleted}</p>
+                <p><strong>Role Match:</strong> ${onboardingRole === mockUser.role}</p>
+                <p><strong>Should Skip Onboarding:</strong> ${shouldSkipOnboarding}</p>
+                <p><strong>Expected Redirect:</strong> ${shouldSkipOnboarding ? 
+                    (mockUser.role === 'jobseeker' ? '/search' : '/post-job') : '/onboarding'}</p>
+            `;
+            
+            document.getElementById('navigation-result').innerHTML = result;
+        }
+        
+        // Initialize on page load
+        checkLocalStorage();
+    </script>
+</body>
+</html>

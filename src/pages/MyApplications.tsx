@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
+import { JobApplicationService, JobApplication } from '../services/jobApplicationService'
 import { 
   Briefcase, 
   Clock, 
@@ -13,21 +14,16 @@ import {
   Calendar,
   User,
   Star,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react'
 
-interface Application {
-  id: number
-  jobTitle: string
-  company: string
+interface Application extends JobApplication {
   location: string
-  appliedDate: string
-  status: 'pending' | 'viewed' | 'referred' | 'interviewed' | 'hired' | 'rejected'
-  matchScore: number
   salary?: string
   jobType: string
   lastActivity: string
-  notes?: string
+  matchScore?: number
 }
 
 interface RecentActivity {
@@ -45,84 +41,37 @@ export function MyApplications() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'pending' | 'viewed' | 'referred' | 'interviewed' | 'hired' | 'rejected'>('all')
+  const [filter, setFilter] = useState<'all' | 'applied' | 'under_review' | 'interview_scheduled' | 'interviewed' | 'accepted' | 'rejected'>('all')
 
   useEffect(() => {
     loadApplications()
-  }, [])
+  }, [filter])
 
   const loadApplications = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      // Mock data - replace with API calls
-      setApplications([
-        {
-          id: 1,
-          jobTitle: 'Senior Frontend Developer',
-          company: 'TechCorp',
-          location: 'San Francisco, CA',
-          appliedDate: '2023-10-20',
-          status: 'referred',
-          matchScore: 95,
-          salary: '$120k - $150k',
-          jobType: 'Full-time',
-          lastActivity: '2 hours ago',
-          notes: 'Referred by John Doe'
-        },
-        {
-          id: 2,
-          jobTitle: 'Product Manager',
-          company: 'StartupXYZ',
-          location: 'Remote',
-          appliedDate: '2023-10-18',
-          status: 'interviewed',
-          matchScore: 88,
-          salary: '$100k - $130k',
-          jobType: 'Full-time',
-          lastActivity: '1 day ago',
-          notes: 'Interview scheduled for next week'
-        },
-        {
-          id: 3,
-          jobTitle: 'UX Designer',
-          company: 'DesignStudio',
-          location: 'New York, NY',
-          appliedDate: '2023-10-15',
-          status: 'viewed',
-          matchScore: 82,
-          salary: '$90k - $110k',
-          jobType: 'Full-time',
-          lastActivity: '3 days ago'
-        },
-        {
-          id: 4,
-          jobTitle: 'Backend Engineer',
-          company: 'DataCorp',
-          location: 'Austin, TX',
-          appliedDate: '2023-10-10',
-          status: 'hired',
-          matchScore: 92,
-          salary: '$110k - $140k',
-          jobType: 'Full-time',
-          lastActivity: '1 week ago',
-          notes: 'Congratulations! You got the job!'
-        },
-        {
-          id: 5,
-          jobTitle: 'Marketing Manager',
-          company: 'GrowthCo',
-          location: 'Chicago, IL',
-          appliedDate: '2023-10-05',
-          status: 'rejected',
-          matchScore: 75,
-          salary: '$80k - $100k',
-          jobType: 'Full-time',
-          lastActivity: '2 weeks ago',
-          notes: 'Position filled internally'
-        }
-      ])
+      const response = await JobApplicationService.getMyApplications({
+        page: 1,
+        per_page: 50,
+        status: filter === 'all' ? undefined : filter
+      })
+      
+      // Transform the response data to match our interface
+      const data = response as any
+      const applicationsData = (data.applications || []).map((app: any) => ({
+        ...app,
+        jobTitle: app.job_title,
+        appliedDate: app.applied_at,
+        lastActivity: app.updated_at,
+        location: app.location || 'Not specified',
+        salary: app.salary || undefined,
+        jobType: app.job_type || 'Full-time',
+        matchScore: app.match_score || undefined
+      }))
+      
+      setApplications(applicationsData)
 
       setRecentActivity([
         {
@@ -171,27 +120,27 @@ export function MyApplications() {
   }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800'
-      case 'viewed': return 'bg-blue-100 text-blue-800'
-      case 'referred': return 'bg-purple-100 text-purple-800'
-      case 'interviewed': return 'bg-orange-100 text-orange-800'
-      case 'hired': return 'bg-green-100 text-green-800'
-      case 'rejected': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
+    return JobApplicationService.getStatusColor(status)
   }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pending': return <Clock className="w-4 h-4" />
-      case 'viewed': return <Eye className="w-4 h-4" />
-      case 'referred': return <User className="w-4 h-4" />
+      case 'applied': return <Clock className="w-4 h-4" />
+      case 'under_review': return <Eye className="w-4 h-4" />
+      case 'interview_scheduled': return <Calendar className="w-4 h-4" />
       case 'interviewed': return <MessageSquare className="w-4 h-4" />
-      case 'hired': return <CheckCircle className="w-4 h-4" />
+      case 'accepted': return <CheckCircle className="w-4 h-4" />
       case 'rejected': return <XCircle className="w-4 h-4" />
       default: return <Clock className="w-4 h-4" />
     }
+  }
+
+  const getStatusLabel = (status: string) => {
+    return JobApplicationService.getStatusLabel(status)
+  }
+
+  const handleRefresh = () => {
+    loadApplications()
   }
 
   const getActivityIcon = (type: string) => {
@@ -211,7 +160,7 @@ export function MyApplications() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -244,11 +193,11 @@ export function MyApplications() {
           <div className="flex flex-wrap gap-2">
             {[
               { key: 'all', label: 'All', count: applications.length },
-              { key: 'pending', label: 'Pending', count: applications.filter(a => a.status === 'pending').length },
-              { key: 'viewed', label: 'Viewed', count: applications.filter(a => a.status === 'viewed').length },
-              { key: 'referred', label: 'Referred', count: applications.filter(a => a.status === 'referred').length },
+              { key: 'applied', label: 'Applied', count: applications.filter(a => a.status === 'applied').length },
+              { key: 'under_review', label: 'Under Review', count: applications.filter(a => a.status === 'under_review').length },
+              { key: 'interview_scheduled', label: 'Interview Scheduled', count: applications.filter(a => a.status === 'interview_scheduled').length },
               { key: 'interviewed', label: 'Interviewed', count: applications.filter(a => a.status === 'interviewed').length },
-              { key: 'hired', label: 'Hired', count: applications.filter(a => a.status === 'hired').length },
+              { key: 'accepted', label: 'Accepted', count: applications.filter(a => a.status === 'accepted').length },
               { key: 'rejected', label: 'Rejected', count: applications.filter(a => a.status === 'rejected').length },
             ].map((tab) => (
               <button
@@ -275,11 +224,11 @@ export function MyApplications() {
                       <div className="flex-1">
                         <div className="flex items-center space-x-3 mb-2">
                           <h3 className="text-lg font-semibold text-gray-900">
-                            {application.jobTitle}
+                            {application.job_title}
                           </h3>
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(application.status)}`}>
                             {getStatusIcon(application.status)}
-                            <span className="ml-1 capitalize">{application.status}</span>
+                            <span className="ml-1">{getStatusLabel(application.status)}</span>
                           </span>
                         </div>
                         
@@ -294,7 +243,7 @@ export function MyApplications() {
                           </div>
                           <div className="flex items-center space-x-1">
                             <Calendar className="w-4 h-4" />
-                            <span>Applied {application.appliedDate}</span>
+                            <span>Applied {application.applied_at}</span>
                           </div>
                         </div>
 

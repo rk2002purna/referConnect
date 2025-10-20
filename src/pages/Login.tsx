@@ -23,6 +23,10 @@ export function Login() {
 
     try {
       await login(email, password)
+      
+      // Clear any stale onboarding completion data to ensure fresh start
+      // Note: We don't clear onboarding_completed flags anymore since we use server-side completion status
+      
       navigate('/dashboard')
     } catch (err: any) {
       // Safely extract error message

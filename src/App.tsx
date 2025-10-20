@@ -14,6 +14,7 @@ import { Profile } from './pages/Profile'
 import { EmployeeProfile } from './pages/EmployeeProfile'
 import PostJob from './pages/PostJob'
 import { EmployeeDashboard } from './pages/EmployeeDashboard'
+import { Notifications } from './pages/Notifications'
 import { Debug } from './pages/Debug'
 import TokenDebug from './pages/TokenDebug'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -21,7 +22,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 // Protected Route component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
-  const { isOnboardingComplete, loading: completionLoading } = useProfileCompletion()
+  const { loading: completionLoading, isOnboardingComplete } = useProfileCompletion()
 
   if (loading || completionLoading) {
     return (
@@ -38,12 +39,19 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // Allow access to profile page, debug page, and post-job page even if onboarding is incomplete
   const currentPath = window.location.pathname
   
-  // Check localStorage for onboarding completion as fallback
-  const onboardingCompleted = localStorage.getItem('onboarding_completed') === 'true'
-  const onboardingRole = localStorage.getItem('onboarding_completed_role')
-  const shouldSkipOnboarding = isOnboardingComplete || (onboardingCompleted && onboardingRole === user?.role)
+  // Use server-side completion status with localStorage fallback
+  console.log('ProtectedRoute - isOnboardingComplete:', isOnboardingComplete, 'currentPath:', currentPath)
+  
+  // Fallback: Check localStorage if server-side completion is false but user has basic info
+  const hasBasicInfo = user?.first_name && user?.last_name && user?.email
+  const localStorageCompleted = localStorage.getItem('onboarding_completed') === 'true'
+  const localStorageRole = localStorage.getItem('onboarding_completed_role')
+  
+  const shouldSkipOnboarding = isOnboardingComplete || 
+    (hasBasicInfo && localStorageCompleted && localStorageRole === user?.role)
   
   if (!shouldSkipOnboarding && currentPath !== '/profile' && currentPath !== '/onboarding' && currentPath !== '/debug' && currentPath !== '/post-job') {
+    console.log('Redirecting to onboarding because completion is false')
     return <Navigate to="/onboarding" replace />
   }
 
@@ -53,7 +61,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 // Public Route component (redirect to dashboard if already logged in)
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
-  const { isOnboardingComplete, loading: completionLoading } = useProfileCompletion()
+  const { loading: completionLoading, isOnboardingComplete } = useProfileCompletion()
 
   if (loading || completionLoading) {
     return (
@@ -64,14 +72,27 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (user) {
-    // Check if onboarding is complete before redirecting
-    if (!isOnboardingComplete) {
-      return <Navigate to="/onboarding" replace />
+    // Use server-side completion status with localStorage fallback
+    console.log('PublicRoute - isOnboardingComplete:', isOnboardingComplete, 'user role:', user.role)
+    
+    // Fallback: Check localStorage if server-side completion is false but user has basic info
+    const hasBasicInfo = user.first_name && user.last_name && user.email
+    const localStorageCompleted = localStorage.getItem('onboarding_completed') === 'true'
+    const localStorageRole = localStorage.getItem('onboarding_completed_role')
+    
+    const shouldSkipOnboarding = isOnboardingComplete || 
+      (hasBasicInfo && localStorageCompleted && localStorageRole === user.role)
+    
+    if (shouldSkipOnboarding) {
+      // Redirect based on user role
+      const redirectPath = user.role === 'jobseeker' ? '/search' : '/post-job'
+      console.log('Redirecting to:', redirectPath)
+      return <Navigate to={redirectPath} replace />
     }
     
-        // Redirect based on user role
-        const redirectPath = user.role === 'jobseeker' ? '/search' : '/post-job'
-        return <Navigate to={redirectPath} replace />
+    // If onboarding is not completed, redirect to onboarding
+    console.log('Redirecting to onboarding because completion is false')
+    return <Navigate to="/onboarding" replace />
   }
 
   return <>{children}</>
@@ -137,6 +158,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Layout><MyReferrals /></Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/notifications" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout><Notifications /></Layout>
                     </ProtectedRoute>
                   } 
                 />

@@ -8,7 +8,8 @@ import { Textarea } from '../components/ui/Textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/Select'
 import { Badge } from '../components/ui/Badge'
 import { VerificationStatusBanner } from '../components/verification'
-import { MapPin, Building2, DollarSign, Clock, Briefcase, Plus, X, Save, Eye, Shield } from 'lucide-react'
+import { jobPostAPI, profileAPI, ProfileResponse } from '../lib/api'
+import { MapPin, Building2, DollarSign, Clock, Briefcase, Plus, X, Save, Eye, Shield, Loader2 } from 'lucide-react'
 
 interface JobFormData {
   title: string
@@ -39,10 +40,11 @@ const PostJob: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState(false)
   const [newSkill, setNewSkill] = useState('')
+  const [companyName, setCompanyName] = useState<string>('')
 
   const [formData, setFormData] = useState<JobFormData>({
     title: '',
-    company: user?.first_name && user?.last_name ? `${user.first_name} ${user.last_name}'s Company` : '',
+    company: '',
     location: '',
     job_type: 'full-time',
     salary_min: '',
@@ -61,6 +63,38 @@ const PostJob: React.FC = () => {
     max_applicants: ''
   })
 
+  // Function to load company data
+  const loadCompanyData = async () => {
+    try {
+      // First try to get company name from profile API
+      const profileResponse = await profileAPI.getProfile()
+      const profile = profileResponse.data as ProfileResponse
+      
+      if (profile.company_name) {
+        setCompanyName(profile.company_name)
+        setFormData(prev => ({ ...prev, company: profile.company_name || '' }))
+        return
+      }
+      
+      // Fallback to localStorage data (from onboarding)
+      const savedCompanyData = localStorage.getItem('employee_company_data')
+      if (savedCompanyData) {
+        const companyData = JSON.parse(savedCompanyData)
+        if (companyData.company_name) {
+          setCompanyName(companyData.company_name)
+          setFormData(prev => ({ ...prev, company: companyData.company_name }))
+          return
+        }
+      }
+      
+      // If no company data found, show error
+      setError('Company information not found. Please complete your profile first.')
+    } catch (error) {
+      console.error('Failed to load company data:', error)
+      setError('Failed to load company information. Please try again.')
+    }
+  }
+
   useEffect(() => {
     if (!user) {
       navigate('/login')
@@ -70,10 +104,19 @@ const PostJob: React.FC = () => {
       navigate('/search')
       return
     }
+    
+    // Load company data when component mounts
+    loadCompanyData()
   }, [user, navigate])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
+    
+    // Prevent changes to company field
+    if (name === 'company') {
+      return
+    }
+    
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
@@ -104,24 +147,60 @@ const PostJob: React.FC = () => {
     setSuccess(null)
 
     try {
-      const response = await fetch('/api/v1/job-posts/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Failed to post job')
+      // Validate required fields
+      if (!formData.title.trim()) {
+        throw new Error('Job title is required')
+      }
+      if (!formData.company.trim()) {
+        throw new Error('Company name is required')
+      }
+      if (!formData.location.trim()) {
+        throw new Error('Location is required')
+      }
+      if (!formData.description.trim()) {
+        throw new Error('Job description is required')
+      }
+      if (!formData.contact_email.trim()) {
+        throw new Error('Contact email is required')
       }
 
-      const result = await response.json()
-      console.log('Job posted successfully:', result)
+      // Validate application deadline if provided
+      if (formData.application_deadline) {
+        const deadlineDate = new Date(formData.application_deadline)
+        const now = new Date()
+        if (deadlineDate <= now) {
+          throw new Error('Application deadline must be in the future')
+        }
+      }
+
+      // Convert form data to API format
+      const jobData = {
+        title: formData.title.trim(),
+        company: formData.company.trim(),
+        location: formData.location.trim(),
+        job_type: formData.job_type,
+        salary_min: formData.salary_min ? parseInt(formData.salary_min) : undefined,
+        salary_max: formData.salary_max ? parseInt(formData.salary_max) : undefined,
+        currency: formData.currency,
+        description: formData.description.trim(),
+        requirements: formData.requirements?.trim() || undefined,
+        benefits: formData.benefits?.trim() || undefined,
+        skills_required: formData.skills_required,
+        experience_level: formData.experience_level,
+        remote_work: formData.remote_work,
+        application_deadline: formData.application_deadline ? new Date(formData.application_deadline).toISOString() : undefined,
+        contact_email: formData.contact_email.trim(),
+        department: formData.department?.trim() || undefined,
+        job_link: formData.job_link?.trim() || undefined,
+        max_applicants: formData.max_applicants ? parseInt(formData.max_applicants) : undefined
+      }
+
+      const response = await jobPostAPI.createJobPost(jobData)
+      console.log('Job posted successfully:', response.data)
       
-      setSuccess('Job posted successfully!')
+      setSuccess('Job posted successfully! Job seekers will be notified about this opportunity.')
+      
+      // Reset form
       setFormData({
         title: '',
         company: user?.first_name && user?.last_name ? `${user.first_name} ${user.last_name}'s Company` : '',
@@ -143,7 +222,27 @@ const PostJob: React.FC = () => {
         max_applicants: ''
       })
     } catch (err: any) {
-      setError(err.message || 'Failed to post job. Please try again.')
+      console.error('Job posting error:', err)
+      
+      // Handle different types of errors
+      if (err.response?.status === 422) {
+        // Validation error
+        const errorData = err.response.data
+        if (errorData?.detail) {
+          if (Array.isArray(errorData.detail)) {
+            const errorMessages = errorData.detail.map((e: any) => e.msg || e.message || e).join(', ')
+            setError(`Validation error: ${errorMessages}`)
+          } else {
+            setError(`Validation error: ${errorData.detail}`)
+          }
+        } else {
+          setError('Please check your input and try again.')
+        }
+      } else if (err.response?.status === 500) {
+        setError('Server error. Please try again later.')
+      } else {
+        setError(err.message || 'Failed to post job. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -396,8 +495,13 @@ const PostJob: React.FC = () => {
                       name="company"
                       value={formData.company}
                       onChange={handleInputChange}
-                      required
+                      readOnly
+                      className="bg-gray-50 cursor-not-allowed"
+                      placeholder="Loading company name..."
                     />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Company name is automatically set from your profile
+                    </p>
                   </div>
                 </div>
 
@@ -645,7 +749,11 @@ const PostJob: React.FC = () => {
                       type="date"
                       value={formData.application_deadline}
                       onChange={handleInputChange}
+                      min={new Date().toISOString().split('T')[0]}
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Leave empty if there's no deadline
+                    </p>
                   </div>
                 </div>
                 
@@ -699,8 +807,17 @@ const PostJob: React.FC = () => {
                 disabled={loading}
                 className="flex items-center gap-2"
               >
-                {loading ? 'Posting Job...' : 'Post Job'}
-                <Briefcase className="w-4 h-4" />
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Posting Job...
+                  </>
+                ) : (
+                  <>
+                    Post Job
+                    <Briefcase className="w-4 h-4" />
+                  </>
+                )}
               </Button>
             </div>
           </form>

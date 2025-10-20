@@ -1,18 +1,18 @@
 import json
 from typing import List, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload
+from sqlmodel import Session
 
 from ..models.user import Job, User
 from ..schemas.job_post import JobPostCreate, JobPostUpdate, JobPostResponse, JobPostListResponse
 
 
 class JobPostService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: Session):
         self.db = db
 
-    async def create_job_post(self, user_id: int, job_data: JobPostCreate) -> JobPostResponse:
+    def create_job_post(self, user_id: int, job_data: JobPostCreate) -> JobPostResponse:
         """Create a new job posting"""
         # Convert skills list to JSON string
         skills_json = json.dumps(job_data.skills_required) if job_data.skills_required else None
@@ -40,14 +40,14 @@ class JobPostService:
         )
         
         self.db.add(job)
-        await self.db.commit()
-        await self.db.refresh(job)
+        self.db.commit()
+        self.db.refresh(job)
         
-        return await self._job_to_response(job)
+        return self._job_to_response(job)
 
-    async def get_job_post(self, job_id: int) -> Optional[JobPostResponse]:
+    def get_job_post(self, job_id: int) -> Optional[JobPostResponse]:
         """Get a specific job posting by ID"""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(Job).where(Job.id == job_id)
         )
         job = result.scalar_one_or_none()
@@ -55,20 +55,20 @@ class JobPostService:
         if not job:
             return None
             
-        return await self._job_to_response(job)
+        return self._job_to_response(job)
 
-    async def get_user_job_posts(self, user_id: int, page: int = 1, per_page: int = 10) -> JobPostListResponse:
+    def get_user_job_posts(self, user_id: int, page: int = 1, per_page: int = 10) -> JobPostListResponse:
         """Get job posts created by a specific user"""
         offset = (page - 1) * per_page
         
         # Get total count
-        count_result = await self.db.execute(
+        count_result =  self.db.execute(
             select(func.count(Job.id)).where(Job.posted_by == user_id)
         )
         total = count_result.scalar()
         
         # Get jobs
-        result = await self.db.execute(
+        result = self.db.execute(
             select(Job)
             .where(Job.posted_by == user_id)
             .order_by(Job.created_at.desc())
@@ -77,7 +77,7 @@ class JobPostService:
         )
         jobs = result.scalars().all()
         
-        job_responses = [await self._job_to_response(job) for job in jobs]
+        job_responses = [ self._job_to_response(job) for job in jobs]
         
         return JobPostListResponse(
             jobs=job_responses,
@@ -87,7 +87,7 @@ class JobPostService:
             total_pages=(total + per_page - 1) // per_page
         )
 
-    async def get_active_job_posts(self, page: int = 1, per_page: int = 10, 
+    def get_active_job_posts(self, page: int = 1, per_page: int = 10, 
                                  job_type: Optional[str] = None,
                                  location: Optional[str] = None,
                                  experience_level: Optional[str] = None) -> JobPostListResponse:
@@ -105,22 +105,27 @@ class JobPostService:
             query = query.where(Job.experience_level == experience_level)
         
         # Get total count
-        count_query = select(func.count(Job.id))
-        for where_clause in query.whereclause.children:
-            count_query = count_query.where(where_clause)
+        count_query = select(func.count(Job.id)).where(Job.is_active == True)
         
-        count_result = await self.db.execute(count_query)
+        if job_type:
+            count_query = count_query.where(Job.job_type == job_type)
+        if location:
+            count_query = count_query.where(Job.location.ilike(f"%{location}%"))
+        if experience_level:
+            count_query = count_query.where(Job.experience_level == experience_level)
+        
+        count_result =  self.db.execute(count_query)
         total = count_result.scalar()
         
         # Get jobs
-        result = await self.db.execute(
+        result = self.db.execute(
             query.order_by(Job.created_at.desc())
             .offset(offset)
             .limit(per_page)
         )
         jobs = result.scalars().all()
         
-        job_responses = [await self._job_to_response(job) for job in jobs]
+        job_responses = [ self._job_to_response(job) for job in jobs]
         
         return JobPostListResponse(
             jobs=job_responses,
@@ -130,10 +135,10 @@ class JobPostService:
             total_pages=(total + per_page - 1) // per_page
         )
 
-    async def update_job_post(self, job_id: int, user_id: int, job_data: JobPostUpdate) -> Optional[JobPostResponse]:
+    def update_job_post(self, job_id: int, user_id: int, job_data: JobPostUpdate) -> Optional[JobPostResponse]:
         """Update a job posting (only by the user who created it)"""
         # First check if the job exists and belongs to the user
-        result = await self.db.execute(
+        result = self.db.execute(
             select(Job).where(Job.id == job_id, Job.posted_by == user_id)
         )
         job = result.scalar_one_or_none()
@@ -155,20 +160,20 @@ class JobPostService:
             update_data['experience_level'] = update_data['experience_level'].value
         
         # Update the job
-        await self.db.execute(
+        self.db.execute(
             update(Job)
             .where(Job.id == job_id, Job.posted_by == user_id)
             .values(**update_data)
         )
         
-        await self.db.commit()
+        self.db.commit()
         
         # Return updated job
-        return await self.get_job_post(job_id)
+        return self.get_job_post(job_id)
 
-    async def delete_job_post(self, job_id: int, user_id: int) -> bool:
+    def delete_job_post(self, job_id: int, user_id: int) -> bool:
         """Soft delete a job posting (only by the user who created it)"""
-        result = await self.db.execute(
+        result = self.db.execute(
             update(Job)
             .where(Job.id == job_id, Job.posted_by == user_id)
             .values(is_active=False)
@@ -177,19 +182,19 @@ class JobPostService:
         if result.rowcount == 0:
             return False
             
-        await self.db.commit()
+        self.db.commit()
         return True
 
-    async def increment_job_views(self, job_id: int) -> None:
+    def increment_job_views(self, job_id: int) -> None:
         """Increment the view count for a job posting"""
-        await self.db.execute(
+        self.db.execute(
             update(Job)
             .where(Job.id == job_id)
             .values(views=Job.views + 1)
         )
-        await self.db.commit()
+        self.db.commit()
 
-    async def _job_to_response(self, job: Job) -> JobPostResponse:
+    def _job_to_response(self, job: Job) -> JobPostResponse:
         """Convert Job model to JobPostResponse"""
         # Parse skills from JSON string
         skills = []
@@ -217,6 +222,8 @@ class JobPostService:
             application_deadline=job.application_deadline,
             contact_email=job.contact_email,
             department=job.department,
+            job_link=job.job_link,
+            max_applicants=job.max_applicants,
             is_active=job.is_active,
             views=job.views,
             applications_count=job.applications_count,

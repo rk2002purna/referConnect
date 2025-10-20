@@ -90,9 +90,49 @@ def refresh_token(
         )
 
 
+@router.get("/me-simple")
+def get_current_user_info_simple(
+    current_user: User = Depends(get_current_user)
+):
+    """Get current user information - simplified version."""
+    try:
+        return {
+            "id": current_user.id,
+            "email": current_user.email,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+            "role": current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role),
+            "is_email_verified": current_user.is_email_verified,
+            "is_active": current_user.is_active
+        }
+    except Exception as e:
+        print(f"Error in me-simple: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@router.get("/test-no-auth")
+def test_no_auth():
+    """Test endpoint without authentication."""
+    return {"message": "No auth test works"}
+
+
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(
+def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """Get current user information."""
-    return UserResponse.model_validate(current_user)
+    try:
+        print(f"DEBUG: User object: {current_user}")
+        print(f"DEBUG: User ID: {current_user.id}")
+        print(f"DEBUG: User email: {current_user.email}")
+        print(f"DEBUG: User role: {current_user.role}")
+        
+        response = UserResponse.model_validate(current_user)
+        print(f"DEBUG: Response created successfully")
+        return response
+        
+    except Exception as e:
+        print(f"DEBUG: Error in /me endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

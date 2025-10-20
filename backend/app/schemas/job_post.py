@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 class JobType(str, Enum):
@@ -44,8 +44,18 @@ class JobPostCreate(BaseModel):
 
     @validator('application_deadline')
     def validate_deadline(cls, v):
-        if v is not None and v <= datetime.now():
-            raise ValueError('Application deadline must be in the future')
+        if v is not None:
+            # Handle timezone-aware datetime comparison
+            now = datetime.now(timezone.utc)
+            if v.tzinfo is None:
+                # If the input datetime is naive, assume it's UTC
+                v = v.replace(tzinfo=timezone.utc)
+            elif v.tzinfo != timezone.utc:
+                # Convert to UTC for comparison
+                v = v.astimezone(timezone.utc)
+            
+            if v <= now:
+                raise ValueError('Application deadline must be in the future')
         return v
 
 class JobPostUpdate(BaseModel):

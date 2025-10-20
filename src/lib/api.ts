@@ -47,7 +47,10 @@ api.interceptors.response.use(
           
           console.log('Token refresh successful, retrying original request')
 
-          originalRequest.headers.Authorization = `Bearer ${access_token}`
+          // Update the original request headers
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${access_token}`
+          }
           return api(originalRequest)
         } else {
           console.log('No refresh token available, redirecting to login')
@@ -116,6 +119,16 @@ export const jobAPI = {
   getCompanyJobs: (companyId: number, params?: PaginationParams) => api.get(`/jobs/company/${companyId}`, { params }),
 }
 
+// Job Post API
+export const jobPostAPI = {
+  getJobPosts: (params?: JobPostSearchParams) => api.get('/job-posts/', { params }),
+  getJobPost: (id: number) => api.get(`/job-posts/${id}`),
+  createJobPost: (data: CreateJobPostData) => api.post('/job-posts/', data),
+  updateJobPost: (id: number, data: UpdateJobPostData) => api.put(`/job-posts/${id}`, data),
+  deleteJobPost: (id: number) => api.delete(`/job-posts/${id}`),
+  getMyJobPosts: (params?: PaginationParams) => api.get('/job-posts/my-jobs', { params }),
+}
+
 // Referral API
 export const referralAPI = {
   create: (data: CreateReferralData) => api.post('/referrals/', data),
@@ -141,6 +154,7 @@ export const searchAPI = {
 export const notificationAPI = {
   getNotifications: (params?: NotificationParams) => api.get('/notifications/', { params }),
   getById: (id: number) => api.get(`/notifications/${id}`),
+  create: (data: CreateNotificationData) => api.post('/notifications/', data),
   update: (id: number, data: UpdateNotificationData) => api.put(`/notifications/${id}`, data),
   markAllRead: () => api.post('/notifications/mark-all-read'),
   getPreferences: () => api.get('/notifications/preferences'),
@@ -187,6 +201,8 @@ export const profileAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
+  getResume: () => api.get('/profile/me/resume'),
+  deleteResume: () => api.delete('/profile/me/resume'),
   getProfileCompletion: () => api.get('/profile/me/completion'),
   
   // Experience API
@@ -432,6 +448,57 @@ export interface JobSearchParams {
   size?: number
 }
 
+export interface JobPostSearchParams {
+  page?: number
+  per_page?: number
+  job_type?: string
+  location?: string
+  experience_level?: string
+}
+
+export interface CreateJobPostData {
+  title: string
+  company: string
+  location: string
+  job_type: string
+  salary_min?: number
+  salary_max?: number
+  currency: string
+  description: string
+  requirements?: string
+  benefits?: string
+  skills_required: string[]
+  experience_level: string
+  remote_work: boolean
+  application_deadline?: string
+  contact_email: string
+  department?: string
+  job_link?: string
+  max_applicants?: number
+}
+
+export interface UpdateJobPostData {
+  title?: string
+  company?: string
+  location?: string
+  job_type?: string
+  salary_min?: number
+  salary_max?: number
+  currency?: string
+  description?: string
+  requirements?: string
+  benefits?: string
+  skills_required?: string[]
+  experience_level?: string
+  remote_work?: boolean
+  application_deadline?: string
+  contact_email?: string
+  department?: string
+  job_link?: string
+  max_applicants?: number
+  is_active?: boolean
+}
+
 export interface CreateReferralData {
   job_id: number
   seeker_email: string
@@ -503,6 +570,17 @@ export interface NotificationPreferencesData {
   system_notifications: boolean
 }
 
+export interface CreateNotificationData {
+  recipient_id: number
+  sender_id?: number
+  title: string
+  message: string
+  notification_type: string
+  priority: string
+  channels: string[]
+  metadata?: Record<string, any>
+}
+
 export interface AnalyticsParams {
   time_range?: string
   company_id?: number
@@ -554,9 +632,34 @@ export interface ProfileUpdateData {
 }
 
 export interface JobSeekerProfileUpdateData {
+  // Basic Info
   skills?: string
   years_experience?: number
   current_company?: string
+  current_job_title?: string
+  education?: string
+  certifications?: string
+  
+  // Job Preferences
+  preferred_job_types?: string
+  salary_expectation_min?: number
+  salary_expectation_max?: number
+  salary_currency?: string
+  notice_period?: number
+  availability?: string
+  industries?: string
+  willing_to_relocate?: boolean
+  work_authorization?: string
+  
+  // Languages
+  languages?: string
+  
+  // Portfolio & Links
+  portfolio_url?: string
+  linkedin_url?: string
+  github_url?: string
+  
+  // Privacy
   privacy_excluded_companies?: string
 }
 
@@ -650,6 +753,9 @@ export interface ProfileResponse {
   website?: string
   is_email_verified: boolean
   is_active: boolean
+  resume_filename?: string
+  resume_url?: string
+  resume_key?: string
   // Company information fields
   company_name?: string
   company_industry?: string
@@ -667,6 +773,24 @@ export interface JobSeekerProfileResponse {
   privacy_excluded_companies?: string
   trust_score: number
   resume_filename?: string
+  resume_url?: string
+  resume_key?: string
+  current_job_title?: string
+  education?: string
+  certifications?: string
+  preferred_job_types?: string
+  industries?: string
+  salary_expectation_min?: number
+  salary_expectation_max?: number
+  salary_currency?: string
+  notice_period?: number
+  availability?: string
+  willing_to_relocate?: boolean
+  work_authorization?: string
+  languages?: string
+  portfolio_url?: string
+  linkedin_url?: string
+  github_url?: string
 }
 
 export interface EmployeeProfileResponse {
@@ -839,9 +963,34 @@ export interface ProfileUpdateData {
 }
 
 export interface JobSeekerProfileUpdateData {
+  // Basic Info
   skills?: string
   years_experience?: number
   current_company?: string
+  current_job_title?: string
+  education?: string
+  certifications?: string
+  
+  // Job Preferences
+  preferred_job_types?: string
+  salary_expectation_min?: number
+  salary_expectation_max?: number
+  salary_currency?: string
+  notice_period?: number
+  availability?: string
+  industries?: string
+  willing_to_relocate?: boolean
+  work_authorization?: string
+  
+  // Languages
+  languages?: string
+  
+  // Portfolio & Links
+  portfolio_url?: string
+  linkedin_url?: string
+  github_url?: string
+  
+  // Privacy
   privacy_excluded_companies?: string
 }
 

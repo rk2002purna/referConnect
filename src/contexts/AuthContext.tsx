@@ -127,6 +127,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const logout = () => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
+    // Note: We don't clear onboarding_completed flags anymore since we use server-side completion status
     setUser(null)
     setVerificationStatus(null)
   }

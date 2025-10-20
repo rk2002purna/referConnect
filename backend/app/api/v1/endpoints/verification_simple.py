@@ -120,7 +120,7 @@ async def send_otp(request: SendOTPRequest):
         expires_at = datetime.utcnow() + timedelta(minutes=10)
         
         # Store OTP in database (simplified - in production, use proper OTP table)
-        conn = sqlite3.connect("app.db")
+        conn = sqlite3.connect("referconnect.db")
         cursor = conn.cursor()
         
         # Create OTP table if it doesn't exist
@@ -148,9 +148,9 @@ async def send_otp(request: SendOTPRequest):
         
         # Get company name for email
         company_name = "Unknown Company"
-        conn_company = sqlite3.connect("app.db")
+        conn_company = sqlite3.connect("referconnect.db")
         cursor_company = conn_company.cursor()
-        cursor_company.execute("SELECT name FROM companies WHERE id = ?", (request.company_id,))
+        cursor_company.execute("SELECT name FROM verified_companies WHERE id = ?", (request.company_id,))
         company_row = cursor_company.fetchone()
         if company_row:
             company_name = company_row[0]
@@ -181,7 +181,7 @@ async def send_otp(request: SendOTPRequest):
 async def verify_otp(request: VerifyOTPRequest):
     """Verify OTP code"""
     try:
-        conn = sqlite3.connect("app.db")
+        conn = sqlite3.connect("referconnect.db")
         cursor = conn.cursor()
         
         # Find valid OTP
@@ -234,7 +234,7 @@ async def get_verification_status():
     """Get verification status for current user"""
     try:
         # Connect to database
-        conn = sqlite3.connect("app.db")
+        conn = sqlite3.connect("referconnect.db")
         cursor = conn.cursor()
         
         # Check if there are any verified OTPs for this user

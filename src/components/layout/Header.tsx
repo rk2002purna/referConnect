@@ -2,10 +2,11 @@ import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button } from '../ui/Button'
+import { NotificationBell } from '../NotificationBell'
 import { 
   User, 
   LogOut, 
-  Bell, 
+  Bell,
   Search, 
   Briefcase, 
   Users, 
@@ -46,6 +47,7 @@ export function Header() {
         ...baseItems,
         { name: 'My Applications', href: '/applications', icon: Briefcase },
         { name: 'My Referrals', href: '/referrals', icon: Users },
+        { name: 'Notifications', href: '/notifications', icon: Bell },
       ]
     }
 
@@ -99,9 +101,7 @@ export function Header() {
             {user ? (
               <>
                 {/* Notifications */}
-                <Button variant="ghost" size="icon">
-                  <Bell className="w-5 h-5" />
-                </Button>
+                <NotificationBell />
 
                 {/* User menu */}
                 <div className="relative">

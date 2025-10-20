@@ -34,7 +34,8 @@ INSERT OR REPLACE INTO verified_companies (id, name, domain, industry, size, ver
 (17, 'Salesforce', 'salesforce.com', 'Technology', '10,000+', 1),
 (18, 'Adobe', 'adobe.com', 'Technology', '1,000-10,000', 1),
 (19, 'Spotify', 'spotify.com', 'Entertainment', '1,000-10,000', 1),
-(20, 'Zoom', 'zoom.us', 'Technology', '1,000-10,000', 1);
+(20, 'Zoom', 'zoom.us', 'Technology', '1,000-10,000', 1),
+(21, 'NRLord', 'nrlord.com', 'Technology', '1-100', 1);
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_verified_companies_domain ON verified_companies(domain);

@@ -8,6 +8,7 @@ import { Progress } from '../ui/Progress'
 import { CheckCircle, ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { OnboardingData, JOB_SEEKER_STEPS, EMPLOYEE_STEPS } from '../../types/onboarding'
 import { profileAPI, verificationAPI } from '../../lib/api'
+import ResumeUploadStep from './ResumeUploadStep'
 
 interface OnboardingWizardProps {
   initialData?: Partial<OnboardingData>
@@ -15,17 +16,26 @@ interface OnboardingWizardProps {
 
 export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   const { user } = useAuth()
-  const { refreshCompletionStatus } = useProfileCompletion()
+  const { refreshCompletionStatus, isOnboardingComplete } = useProfileCompletion()
   const navigate = useNavigate()
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [data, setData] = useState<OnboardingData>({
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
     email: user?.email || '',
+    jobseeker: {
+      skills: [],
+      preferred_job_types: [],
+      industries: [],
+      languages: [],
+      certifications: [],
+      privacy_excluded_companies: []
+    },
     ...initialData
   })
   const [errors, setErrors] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+
 
   // Update data when user data changes
   useEffect(() => {
@@ -42,7 +52,16 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   // Get steps based on role and verification method
   const getSteps = () => {
     if (user?.role === 'jobseeker') {
-      return JOB_SEEKER_STEPS
+      // Add ResumeUploadStep to the jobseeker steps
+      const jobseekerSteps = [...JOB_SEEKER_STEPS]
+      jobseekerSteps.push({
+        id: 'resume-upload',
+        title: 'Resume & Portfolio',
+        description: 'Upload your resume and portfolio links',
+        component: ResumeUploadStep,
+        isRequired: false
+      })
+      return jobseekerSteps
     }
     
     // For employees, filter steps based on verification method
@@ -73,11 +92,31 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   const currentStep = steps[currentStepIndex]
   const progress = ((currentStepIndex + 1) / steps.length) * 100
 
+  // Check if onboarding is already completed and redirect accordingly
+  useEffect(() => {
+    // Use server-side completion status instead of localStorage
+    if (isOnboardingComplete && !isSubmitting && currentStepIndex < steps.length - 1) {
+      console.log('Onboarding already completed, redirecting...')
+      if (user?.role === 'jobseeker') {
+        navigate('/search', { replace: true })
+      } else if (user?.role === 'employee') {
+        navigate('/post-job', { replace: true })
+      } else {
+        navigate('/profile', { replace: true })
+      }
+    }
+  }, [isOnboardingComplete, navigate, isSubmitting, currentStepIndex, steps.length, user?.role])
+
   const updateData = (updates: Partial<OnboardingData>) => {
-    setData(prev => ({
-      ...prev,
-      ...updates
-    }))
+    console.log('Updating onboarding data with:', updates)
+    setData(prev => {
+      const newData = {
+        ...prev,
+        ...updates
+      }
+      console.log('New onboarding data:', newData)
+      return newData
+    })
     setErrors([])
   }
 
@@ -113,7 +152,8 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
 
   // Handle company selection
   const handleCompanySelect = (company: any) => {
-    updateData({
+    console.log('Company selected:', company)
+    const updatedData = {
       verification: {
         ...data.verification,
         company_id: company.id,
@@ -121,7 +161,9 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
         company_domain: company.domain,
         personal_email: data.email // Set personal email from registration data
       }
-    })
+    }
+    console.log('Updated verification data:', updatedData.verification)
+    updateData(updatedData)
     // Move to next step after company selection
     setCurrentStepIndex(prev => prev + 1)
   }
@@ -196,6 +238,7 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
     setIsSubmitting(true)
     try {
       console.log('Completing onboarding with data:', data)
+      console.log('Jobseeker data:', data.jobseeker)
       
       // Save basic profile information
       await profileAPI.updateProfile({
@@ -210,9 +253,34 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
       // Save role-specific profile
       if (user?.role === 'jobseeker' && data.jobseeker) {
         await profileAPI.updateJobSeekerProfile({
+          // Basic Info
           skills: data.jobseeker.skills?.join(',') || '',
           years_experience: data.jobseeker.years_experience || 0,
           current_company: data.jobseeker.current_company,
+          current_job_title: data.jobseeker.current_job_title,
+          education: data.jobseeker.education,
+          certifications: data.jobseeker.certifications?.join(',') || '',
+          
+          // Job Preferences
+          preferred_job_types: data.jobseeker.preferred_job_types?.join(',') || '',
+          salary_expectation_min: data.jobseeker.salary_expectation?.min,
+          salary_expectation_max: data.jobseeker.salary_expectation?.max,
+          salary_currency: data.jobseeker.salary_expectation?.currency,
+          notice_period: data.jobseeker.notice_period,
+          availability: data.jobseeker.availability,
+          industries: data.jobseeker.industries?.join(',') || '',
+          willing_to_relocate: data.jobseeker.willing_to_relocate,
+          work_authorization: data.jobseeker.work_authorization,
+          
+          // Languages
+          languages: data.jobseeker.languages ? JSON.stringify(data.jobseeker.languages) : '',
+          
+          // Portfolio & Links
+          portfolio_url: data.jobseeker.portfolio_url,
+          linkedin_url: data.jobseeker.linkedin_url,
+          github_url: data.jobseeker.github_url,
+          
+          // Privacy
           privacy_excluded_companies: data.jobseeker.privacy_excluded_companies?.join(',') || ''
         })
       } else if (user?.role === 'employee' && data.employee) {
@@ -220,6 +288,29 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
           title: data.employee.job_title,
           badges: data.employee.skills_areas?.join(',') || ''
         })
+        
+        // Save employee company data to localStorage for the EmployeeProfile component
+        console.log('Onboarding completion - verification data:', data.verification)
+        console.log('Onboarding completion - employee data:', data.employee)
+        console.log('Onboarding completion - full data:', data)
+        
+        const companyData = {
+          company_name: data.verification?.company_name || '',
+          company_industry: 'Technology', // Default industry, can be enhanced later
+          company_email: data.verification?.company_email || data.email,
+          office_location: data.employee?.office_location || data.location || '',
+          job_title: data.employee?.job_title || '',
+          department: data.employee?.department || '',
+          years_at_company: data.employee?.years_at_company || 0
+        }
+        
+        console.log('Company data to be saved:', companyData)
+        localStorage.setItem('employee_company_data', JSON.stringify(companyData))
+        console.log('Employee company data saved to localStorage:', companyData)
+        
+        // Verify the data was saved correctly
+        const savedData = localStorage.getItem('employee_company_data')
+        console.log('Verification - data saved to localStorage:', savedData)
       }
 
       // Save verification status for employees
@@ -244,20 +335,16 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
         }
       }
 
-      // Mark onboarding as completed in localStorage
+      // Set localStorage flags as backup
       localStorage.setItem('onboarding_completed', 'true')
       localStorage.setItem('onboarding_completed_role', user?.role || '')
-      console.log('Onboarding marked as completed in localStorage')
-
-      // Refresh profile completion status
+      console.log('Onboarding marked as completed in localStorage as backup')
+      
+      // Refresh profile completion status to get updated server-side completion
       await refreshCompletionStatus()
       
       // Add a small delay to ensure completion status is updated
       await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Set onboarding completion in localStorage
-      localStorage.setItem('onboarding_completed', 'true')
-      localStorage.setItem('onboarding_completed_role', user?.role || '')
       
       // Redirect based on role
       if (user?.role === 'jobseeker') {

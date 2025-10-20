@@ -1,13 +1,28 @@
-import React from 'react'
+import React, { useState, useCallback } from 'react'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
+import PhoneNumberInput from '../ui/PhoneNumberInput'
 import { OnboardingStepProps } from '../../types/onboarding'
-import { User, Mail, Phone, MapPin, FileText } from 'lucide-react'
+import { User, Mail, MapPin, FileText } from 'lucide-react'
 
 export default function BasicInfoStep({ data, updateData }: OnboardingStepProps) {
+  const [phoneValidation, setPhoneValidation] = useState<{isValid: boolean, error?: string}>({isValid: true})
+  
   const handleInputChange = (field: string, value: string) => {
     updateData({ [field]: value })
   }
+
+  const handlePhoneChange = (phoneNumber: string, countryCode: string) => {
+    // Store both phone number and country code
+    updateData({ 
+      phone: phoneNumber,
+      phone_country_code: countryCode 
+    })
+  }
+
+  const handlePhoneValidation = useCallback((isValid: boolean, error?: string) => {
+    setPhoneValidation({ isValid, error })
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -88,20 +103,22 @@ export default function BasicInfoStep({ data, updateData }: OnboardingStepProps)
         <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
           Phone Number
         </label>
-        <div className="relative">
-          <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <Input
-            id="phone"
-            type="tel"
-            value={data.phone || ''}
-            onChange={(e) => handleInputChange('phone', e.target.value)}
-            placeholder="Enter your phone number"
-            className="pl-10"
-          />
-        </div>
+        <PhoneNumberInput
+          value={data.phone || ''}
+          countryCode={data.phone_country_code || '+91'}
+          onChange={handlePhoneChange}
+          onValidationChange={handlePhoneValidation}
+          placeholder="Enter your phone number"
+          className="w-full"
+        />
         <p className="mt-1 text-xs text-gray-500">
           Optional - helps with verification and communication
         </p>
+        {!phoneValidation.isValid && phoneValidation.error && (
+          <p className="mt-1 text-xs text-red-600">
+            {phoneValidation.error}
+          </p>
+        )}
       </div>
 
       <div>

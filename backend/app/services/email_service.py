@@ -19,16 +19,16 @@ from pathlib import Path
 # Get the project root directory
 project_root = Path(__file__).parent.parent.parent
 env_path = project_root / '.env'
-print(f"🔍 Loading .env from: {env_path}")
-print(f"🔍 .env exists: {env_path.exists()}")
+print(f"Loading .env from: {env_path}")
+print(f".env exists: {env_path.exists()}")
 
 load_dotenv(env_path)
 
 class EmailService:
     def __init__(self):
-        print(f"🔍 EmailService Initialization Debug")
-        print(f"🔍 SENDGRID_API_KEY: {'Set' if os.getenv('SENDGRID_API_KEY') else 'Not set'}")
-        print(f"🔍 SENDGRID_FROM_EMAIL: {'Set' if os.getenv('SENDGRID_FROM_EMAIL') else 'Not set'}")
+        print(f"EmailService Initialization Debug")
+        print(f"SENDGRID_API_KEY: {'Set' if os.getenv('SENDGRID_API_KEY') else 'Not set'}")
+        print(f"SENDGRID_FROM_EMAIL: {'Set' if os.getenv('SENDGRID_FROM_EMAIL') else 'Not set'}")
         
         self.providers = {
             'gmail': {
@@ -59,11 +59,11 @@ class EmailService:
             }
         }
         
-        print(f"🔍 SendGrid config: api_key={'Set' if self.providers['sendgrid']['api_key'] else 'Not set'}, from_email={'Set' if self.providers['sendgrid']['from_email'] else 'Not set'}")
+        print(f"SendGrid config: api_key={'Set' if self.providers['sendgrid']['api_key'] else 'Not set'}, from_email={'Set' if self.providers['sendgrid']['from_email'] else 'Not set'}")
         
         # Determine which service to use (priority order)
         self.active_service = self._get_active_service()
-        print(f"🔍 Active service determined: {self.active_service}")
+        print(f"Active service determined: {self.active_service}")
         
     def _get_active_service(self) -> str:
         """Determine which email service to use based on available credentials"""
@@ -162,8 +162,8 @@ class EmailService:
                     }
                 )
                 
-                print(f"🔍 SendGrid Response: Status {response.status_code}")
-                print(f"🔍 SendGrid Response Body: {response.text}")
+                print(f"SendGrid Response: Status {response.status_code}")
+                print(f"SendGrid Response Body: {response.text}")
                 
                 if response.status_code == 202:
                     print(f"✅ OTP sent via SendGrid to {to_email}")

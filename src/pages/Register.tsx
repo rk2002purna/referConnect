@@ -65,6 +65,9 @@ export function Register() {
       
       console.log('Calling register API with data:', registerData)
       await register(registerData)
+      
+      // Clear any stale onboarding completion data
+      // Note: We don't clear onboarding_completed flags anymore since we use server-side completion status
       console.log('Registration successful, navigating to onboarding')
       navigate('/onboarding')
     } catch (err: any) {

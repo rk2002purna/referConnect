@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
-import { dashboardAPI } from '../lib/api'
+import { dashboardAPI, profileAPI } from '../lib/api'
 import { 
   Search, 
   Filter, 
@@ -29,6 +29,9 @@ import {
   EyeOff,
   RefreshCw
 } from 'lucide-react'
+import { jobPostAPI } from '../lib/api'
+import { JobMatchingService, JobSeekerProfile } from '../services/jobMatchingService'
+import { useAuth } from '../contexts/AuthContext'
 
 interface JobRecommendation {
   id: number
@@ -71,6 +74,7 @@ interface ActivityItem {
 
 
 export function JobSeekerDashboard() {
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
@@ -93,201 +97,126 @@ export function JobSeekerDashboard() {
   })
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
   const [profileCompletion, setProfileCompletion] = useState(0)
+  const [jobseekerProfile, setJobseekerProfile] = useState<JobSeekerProfile | null>(null)
+
+  // Load jobseeker profile for accurate matching
+  useEffect(() => {
+    const loadJobseekerProfile = async () => {
+      if (!user || user.role !== 'jobseeker') {
+        setJobseekerProfile(null)
+        return
+      }
+
+      try {
+        const response = await profileAPI.getJobSeekerProfile()
+        const profile = response.data as any
+        
+        // Convert API response to JobSeekerProfile format
+        const jobSeeker: JobSeekerProfile = {
+          id: user.id,
+          skills: profile.skills ? profile.skills.split(',').map((s: string) => s.trim()) : [],
+          experience_level: profile.years_experience ? 
+            (profile.years_experience < 2 ? 'entry' : 
+             profile.years_experience < 5 ? 'mid' : 
+             profile.years_experience < 10 ? 'senior' : 'executive') : 'mid',
+          preferred_job_types: profile.preferred_job_types ? 
+            profile.preferred_job_types.split(',').map((s: string) => s.trim()) : [],
+          location: profile.location || '',
+          salary_expectation_min: profile.salary_expectation_min,
+          salary_expectation_max: profile.salary_expectation_max,
+          industries: profile.industries ? 
+            profile.industries.split(',').map((s: string) => s.trim()) : [],
+          willing_to_relocate: profile.willing_to_relocate ?? true,
+        }
+        setJobseekerProfile(jobSeeker)
+      } catch (error) {
+        console.error('Failed to load jobseeker profile:', error)
+        setJobseekerProfile(null)
+      }
+    }
+
+    loadJobseekerProfile()
+  }, [user])
 
   // Load dashboard data
   useEffect(() => {
     loadDashboardData()
-  }, [])
+  }, [jobseekerProfile])
 
   const loadDashboardData = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      // For now, use mock data to avoid API errors
-      // In production, you would uncomment the API calls below
-      
-      // Load all dashboard data in parallel
-      // const [overviewRes, recommendationsRes, activityRes, searchesRes, statsRes] = await Promise.all([
-      //   dashboardAPI.getOverview(),
-      //   dashboardAPI.getRecommendations(5),
-      //   dashboardAPI.getActivityFeed(10),
-      //   dashboardAPI.getSavedSearches(),
-      //   dashboardAPI.getStats()
-      // ])
+      // Only compute recommendations if we have jobseeker profile data
+      if (jobseekerProfile) {
+        // Fetch recent jobs
+        const jobsRes = await jobPostAPI.getJobPosts({ page: 1, per_page: 50 })
+        const data = jobsRes.data as any
+        const jobs = data.jobs as Array<any>
+        // Compute matches and map to dashboard recommendation shape
+        const scored = jobs.map((job) => {
+          const jobPost = {
+            id: job.id,
+            title: job.title,
+            company: job.company,
+            location: job.location,
+            job_type: job.job_type,
+            skills_required: job.skills_required || [],
+            experience_level: job.experience_level,
+            salary_min: job.salary_min,
+            salary_max: job.salary_max,
+            description: job.description,
+            is_active: job.is_active,
+            created_at: job.created_at,
+          }
+          const match = JobMatchingService.calculateMatchScore(jobseekerProfile, jobPost)
+          return { job, score: Math.round(match.matchScore * 100) }
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
 
-      // Use mock data for now
-      setRecommendations([
-        {
-          id: 1,
-          title: 'Senior Frontend Developer',
-          company: 'TechCorp',
-          location: 'San Francisco, CA',
-          matchScore: 95,
-          skills: ['React', 'TypeScript', 'Node.js'],
-          salary: '$120k - $150k',
-          type: 'Full-time',
-          postedAt: '2 hours ago'
-        },
-        {
-          id: 2,
-          title: 'Full Stack Engineer',
-          company: 'StartupXYZ',
-          location: 'Remote',
-          matchScore: 88,
-          skills: ['Python', 'React', 'AWS'],
-          salary: '$100k - $130k',
-          type: 'Full-time',
-          postedAt: '1 day ago'
-        },
-        {
-          id: 3,
-          title: 'Product Manager',
-          company: 'DataCorp',
-          location: 'New York, NY',
-          matchScore: 82,
-          skills: ['Product Management', 'Analytics', 'Agile'],
-          salary: '$110k - $140k',
-          type: 'Full-time',
-          postedAt: '3 days ago'
-        }
-      ])
+        const recs: JobRecommendation[] = scored.map(({ job, score }) => ({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          matchScore: score,
+          skills: Array.isArray(job.skills_required) ? job.skills_required : [],
+          salary: job.salary_min && job.salary_max ? `$${job.salary_min} - $${job.salary_max}` : undefined,
+          type: job.job_type,
+          postedAt: new Date(job.created_at).toLocaleDateString(),
+        }))
+        setRecommendations(recs)
+      } else {
+        // No profile data, show empty recommendations
+        setRecommendations([])
+      }
       
-      setRecentActivity([
-        {
-          id: 1,
-          type: 'referral',
-          title: 'Referral Accepted',
-          description: 'Your referral request for Senior Developer at TechCorp was accepted',
-          timestamp: '2 hours ago',
-          status: 'new',
-          actionUrl: '/referrals/1'
-        },
-        {
-          id: 2,
-          type: 'application',
-          title: 'Application Viewed',
-          description: 'Your application for Product Manager at DataCorp was viewed',
-          timestamp: '4 hours ago',
-          status: 'read'
-        },
-        {
-          id: 3,
-          type: 'recommendation',
-          title: 'New Job Match',
-          description: '3 new jobs match your skills and preferences',
-          timestamp: '1 day ago',
-          status: 'read'
-        },
-        {
-          id: 4,
-          type: 'message',
-          title: 'Message from John Doe',
-          description: 'John from TechCorp wants to discuss your application',
-          timestamp: '2 days ago',
-          status: 'action_required',
-          actionUrl: '/messages/1'
-        }
-      ])
-      
+      // Example status and activity (keep as mock for now)
       setApplicationStatus({
-        total: 24,
-        pending: 8,
-        viewed: 6,
-        referred: 4,
-        interviewed: 3,
-        hired: 3
-      })
-      
-      setReferralStatus({
         total: 12,
-        pending: 5,
-        accepted: 4,
-        declined: 2,
-        feedback: 1
+        pending: 4,
+        viewed: 3,
+        referred: 2,
+        interviewed: 2,
+        hired: 1
       })
-      
-      setProfileCompletion(75)
-
-    } catch (err: any) {
-      console.error('Failed to load dashboard data:', err)
-      setError('Failed to load dashboard data. Please try again.')
-      
-      // Fallback to mock data
-      setRecommendations([
-        {
-          id: 1,
-          title: 'Senior Frontend Developer',
-          company: 'TechCorp',
-          location: 'San Francisco, CA',
-          matchScore: 95,
-          skills: ['React', 'TypeScript', 'Node.js'],
-          salary: '$120k - $150k',
-          type: 'Full-time',
-          postedAt: '2 hours ago'
-        },
-        {
-          id: 2,
-          title: 'Full Stack Engineer',
-          company: 'StartupXYZ',
-          location: 'Remote',
-          matchScore: 88,
-          skills: ['Python', 'React', 'AWS'],
-          salary: '$100k - $130k',
-          type: 'Full-time',
-          postedAt: '1 day ago'
-        },
-        {
-          id: 3,
-          title: 'Product Manager',
-          company: 'DataCorp',
-          location: 'New York, NY',
-          matchScore: 82,
-          skills: ['Product Management', 'Analytics', 'Agile'],
-          salary: '$110k - $140k',
-          type: 'Full-time',
-          postedAt: '3 days ago'
-        }
-      ])
-      
+      setReferralStatus({ total: 5, pending: 2, accepted: 2, declined: 1, feedback: 0 })
       setRecentActivity([
         {
           id: 1,
-          type: 'referral',
-          title: 'Referral Accepted',
-          description: 'Your referral request for Senior Developer at TechCorp was accepted',
-          timestamp: '2 hours ago',
-          status: 'new',
-          actionUrl: '/referrals/1'
-        },
-        {
-          id: 2,
-          type: 'application',
-          title: 'Application Viewed',
-          description: 'Your application for Product Manager at DataCorp was viewed',
-          timestamp: '4 hours ago',
-          status: 'read'
-        },
-        {
-          id: 3,
           type: 'recommendation',
-          title: 'New Job Match',
-          description: '3 new jobs match your skills and preferences',
-          timestamp: '1 day ago',
-          status: 'read'
+          title: 'New matched job posted',
+          description: 'We found a role that matches your skills',
+          timestamp: new Date().toISOString(),
+          status: 'new'
         },
-        {
-          id: 4,
-          type: 'message',
-          title: 'Message from John Doe',
-          description: 'John from TechCorp wants to discuss your application',
-          timestamp: '2 days ago',
-          status: 'action_required',
-          actionUrl: '/messages/1'
-        }
       ])
-      
-      setProfileCompletion(75)
+      setProfileCompletion(78)
+    } catch (err: any) {
+      console.error(err)
+      setError('Failed to load dashboard')
     } finally {
       setLoading(false)
     }

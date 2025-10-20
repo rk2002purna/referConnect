@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = Field(default="change-me")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=15)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60 * 24 * 2)  # 48 hours
     REFRESH_TOKEN_EXPIRE_MINUTES: int = Field(default=60 * 24 * 14)
     JWT_ALGORITHM: str = Field(default="HS256")
     ALGORITHM: str = Field(default="HS256")
@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     # Compliance flags
     GDPR_ENABLED: bool = Field(default=True)
     CCPA_ENABLED: bool = Field(default=True)
+
+    # AWS S3 Configuration
+    AWS_S3_BUCKET_NAME: str = Field(default="referconnect-resumes")
+    AWS_S3_REGION: str = Field(default="eu-north-1")
+    AWS_ACCESS_KEY_ID: str = Field(default="")
+    AWS_SECRET_ACCESS_KEY: str = Field(default="")
 
 
 @lru_cache()

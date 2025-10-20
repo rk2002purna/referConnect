@@ -41,12 +41,21 @@ import {
   Camera,
   Award
 } from 'lucide-react'
+import { ResumeViewer } from '../components/ResumeViewer'
 
 export function Profile() {
   const navigate = useNavigate()
   const { user } = useAuth()
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { refreshCompletionStatus } = useProfileCompletion()
+
+  // Helper function to get API base URL
+  const getApiBaseUrl = () => {
+    return process.env.REACT_APP_API_URL || 
+           process.env.NEXT_PUBLIC_API_URL || 
+           process.env.VITE_API_URL || 
+           (window.location.hostname === 'localhost' ? 'http://localhost:8000/api/v1' : 'https://referconnect-production.up.railway.app/api/v1')
+  }
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -81,12 +90,6 @@ export function Profile() {
   })
   const [editSkills, setEditSkills] = useState<Array<{name: string, proficiency: number}>>([])
   const [newSkill, setNewSkill] = useState('')
-  const [editJobPreferences, setEditJobPreferences] = useState({
-    jobTypes: [] as string[],
-    industries: [] as string[],
-    salaryRange: '',
-    remote: false
-  })
   const [editPrivacy, setEditPrivacy] = useState({
     profileVisibility: 'public',
     excludedCompanies: [] as string[]
@@ -122,6 +125,9 @@ export function Profile() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   
+  // Resume viewer states
+  const [showResumeViewer, setShowResumeViewer] = useState(false)
+  
   // Experience and Education data
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [experiences] = useState<Array<{
@@ -151,12 +157,6 @@ export function Profile() {
   ])
   
   
-  const [jobPreferences] = useState({
-    jobTypes: ['Full-time'],
-    industries: ['Technology', 'Fintech'],
-    salaryRange: '$120k - $150k',
-    remote: false
-  })
   
   const [privacySettings] = useState({
     profileVisibility: 'public',
@@ -186,6 +186,15 @@ export function Profile() {
           const jobseekerResponse = await profileAPI.getJobSeekerProfile()
           const jobseekerProfile = jobseekerResponse.data as JobSeekerProfileResponse
           setJobseekerProfile(jobseekerProfile)
+          
+          // Parse skills from comma-separated string
+          if (jobseekerProfile.skills) {
+            const skillsArray = jobseekerProfile.skills.split(',').map(skill => ({
+              name: skill.trim(),
+              proficiency: 4 // Default proficiency level
+            }))
+            setSkills(skillsArray)
+          }
         } catch (err) {
           console.log('No jobseeker profile found, will create one')
         }
@@ -409,17 +418,17 @@ export function Profile() {
       })
     } else if (section === 'skills') {
       setEditSkills([...skills])
-    } else if (section === 'jobPreferences') {
-      setEditJobPreferences({
-        jobTypes: jobPreferences.jobTypes,
-        industries: jobPreferences.industries,
-        salaryRange: jobPreferences.salaryRange,
-        remote: jobPreferences.remote
-      })
     } else if (section === 'privacy') {
       setEditPrivacy({
         profileVisibility: privacySettings.profileVisibility,
         excludedCompanies: privacySettings.excludedCompanies
+      })
+    } else if (section === 'professional') {
+      setEditJobseekerData({
+        current_company: jobseekerProfile?.current_company || '',
+        current_job_title: jobseekerProfile?.current_job_title || '',
+        years_experience: jobseekerProfile?.years_experience || 0,
+        education: jobseekerProfile?.education || ''
       })
     } else if (section === 'experience') {
       setEditExperience([...experience])
@@ -455,9 +464,23 @@ export function Profile() {
         const skillsString = editSkills.map(s => s.name).join(',')
         await profileAPI.updateJobSeekerProfile({ skills: skillsString })
         setSkills([...editSkills])
-      } else if (section === 'jobPreferences') {
-        // This would need a separate API endpoint for job preferences
-        console.log('Job preferences update not implemented yet')
+        
+        // Refresh the jobseeker profile to get updated data
+        const jobseekerResponse = await profileAPI.getJobSeekerProfile()
+        const updatedJobseekerProfile = jobseekerResponse.data as JobSeekerProfileResponse
+        setJobseekerProfile(updatedJobseekerProfile)
+      } else if (section === 'professional') {
+        await profileAPI.updateJobSeekerProfile({
+          current_company: editJobseekerData.current_company,
+          current_job_title: editJobseekerData.current_job_title,
+          years_experience: editJobseekerData.years_experience,
+          education: editJobseekerData.education
+        })
+        
+        // Refresh the jobseeker profile to get updated data
+        const jobseekerResponse = await profileAPI.getJobSeekerProfile()
+        const updatedJobseekerProfile = jobseekerResponse.data as JobSeekerProfileResponse
+        setJobseekerProfile(updatedJobseekerProfile)
       } else if (section === 'privacy') {
         // This would need a separate API endpoint for privacy settings
         console.log('Privacy settings update not implemented yet')
@@ -591,6 +614,37 @@ export function Profile() {
     }
   }
 
+  const handleResumeDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete your resume? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      setUploadingResume(true)
+      setError(null)
+      setSuccess(null)
+
+      await profileAPI.deleteResume()
+      setSuccess('Resume deleted successfully!')
+      
+      // Refresh profile data to get updated resume info
+      await loadProfileData()
+      
+      // Refresh completion data after resume deletion
+      try {
+        const completionResponse = await profileAPI.getProfileCompletion()
+        setCompletion(completionResponse.data as ProfileCompletionResponse)
+      } catch (err) {
+        console.error('Failed to refresh completion data:', err)
+      }
+    } catch (err: any) {
+      console.error('Failed to delete resume:', err)
+      setError('Failed to delete resume. Please try again.')
+    } finally {
+      setUploadingResume(false)
+    }
+  }
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
@@ -646,19 +700,7 @@ export function Profile() {
     setEditSkills(editSkills.filter(skill => skill.name !== skillToRemove))
   }
 
-  const updateSkillProficiency = (skillName: string, proficiency: number) => {
-    setEditSkills(editSkills.map(skill => 
-      skill.name === skillName ? { ...skill, proficiency } : skill
-    ))
-  }
 
-  const getProficiencyLabel = (proficiency: number) => {
-    if (proficiency >= 5) return 'Expert'
-    if (proficiency >= 4) return 'Advanced'
-    if (proficiency >= 3) return 'Intermediate'
-    if (proficiency >= 2) return 'Beginner'
-    return 'Novice'
-  }
 
   const addExcludedCompany = () => {
     if (newExcludedCompany.trim() && !editPrivacy.excludedCompanies.includes(newExcludedCompany.trim())) {
@@ -841,6 +883,40 @@ export function Profile() {
                 </CardContent>
               </Card>
 
+              {/* Trust Score Section */}
+              <Card className="bg-white shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg font-semibold text-gray-900">Trust Score</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-r from-green-400 to-blue-500 flex items-center justify-center">
+                        <span className="text-white font-bold text-xl">
+                          {jobseekerProfile?.trust_score || 0}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">
+                        Your trust score is based on profile completeness, verification status, and activity.
+                      </p>
+                      <div className="mt-2">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-gradient-to-r from-green-400 to-blue-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min((jobseekerProfile?.trust_score || 0) * 10, 100)}%` }}
+                          ></div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {Math.min((jobseekerProfile?.trust_score || 0) * 10, 100)}% complete
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Profile View Card */}
               <Card className="bg-white shadow-sm">
                 <CardHeader className="pb-3">
@@ -886,7 +962,14 @@ export function Profile() {
                           {profile?.first_name || 'User'} {profile?.last_name || 'Name'}
                         </h1>
                         <p className="text-lg text-gray-600 mt-1">
-                          {jobseekerProfile?.current_company ? `Senior UX Designer at ${jobseekerProfile.current_company}` : 'Job Seeker'}
+                          {jobseekerProfile?.current_job_title && jobseekerProfile?.current_company 
+                            ? `${jobseekerProfile.current_job_title} at ${jobseekerProfile.current_company}`
+                            : jobseekerProfile?.current_job_title 
+                            ? jobseekerProfile.current_job_title
+                            : jobseekerProfile?.current_company
+                            ? `at ${jobseekerProfile.current_company}`
+                            : 'Job Seeker'
+                          }
                         </p>
                         <div className="flex items-center mt-2 text-sm text-gray-500">
                       <MapPin className="w-4 h-4 mr-1" />
@@ -1065,85 +1148,244 @@ export function Profile() {
                   <CardTitle className="text-lg font-semibold text-gray-900">Resume</CardTitle>
                   {jobseekerProfile?.resume_filename && (
                     <div className="flex items-center space-x-2">
-                      <button className="text-gray-400 hover:text-gray-600" title="Preview Resume">
-                        <Eye className="w-4 h-4" />
-                        </button>
-                      <button className="text-gray-400 hover:text-gray-600" title="Download Resume">
-                        <Download className="w-4 h-4" />
-                      </button>
+                      {(jobseekerProfile.resume_url || jobseekerProfile.resume_key) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-green-600 border-green-300 hover:bg-green-50 flex items-center gap-1"
+                          onClick={() => setShowResumeViewer(true)}
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span className="hidden sm:inline">View</span>
+                        </Button>
+                      )}
+                      {jobseekerProfile.resume_url && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-blue-600 border-blue-300 hover:bg-blue-50 flex items-center gap-1"
+                          onClick={() => {
+                            // For S3 URLs, open in new tab for download
+                            if (jobseekerProfile.resume_url!.includes('amazonaws.com') || jobseekerProfile.resume_url!.includes('s3')) {
+                              window.open(jobseekerProfile.resume_url!, '_blank');
+                            } else {
+                              // For local URLs, use download link
+                              const link = document.createElement('a');
+                              link.href = jobseekerProfile.resume_url!;
+                              link.download = jobseekerProfile.resume_filename!;
+                              link.click();
+                            }
+                          }}
+                        >
+                          <Download className="w-4 h-4" />
+                          <span className="hidden sm:inline">Download</span>
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 border-red-300 hover:bg-red-50 flex items-center gap-1"
+                        onClick={handleResumeDelete}
+                        disabled={uploadingResume}
+                      >
+                        <X className="w-4 h-4" />
+                        <span className="hidden sm:inline">Delete</span>
+                      </Button>
                     </div>
                   )}
-            </CardHeader>
-            <CardContent>
-                  {jobseekerProfile?.resume_filename ? (
-                    <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
-                      <div className="flex items-center justify-center mb-4">
-                        <FileText className="w-8 h-8 text-red-500" />
+                </CardHeader>
+                <CardContent>
+                    {jobseekerProfile?.resume_filename ? (
+                      <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
+                        <div className="flex items-center justify-center mb-4">
+                          <FileText className="w-8 h-8 text-red-500" />
+                        </div>
+                        <p className="font-medium text-gray-900 mb-1">{jobseekerProfile.resume_filename}</p>
+                        {!jobseekerProfile.resume_url && !jobseekerProfile.resume_key && (
+                          <p className="text-sm text-amber-600 mb-2">
+                            ⚠️ Resume file exists but URL is not available. Please re-upload your resume.
+                          </p>
+                        )}
+                        {(jobseekerProfile.resume_url || jobseekerProfile.resume_key) && (
+                          <p className="text-sm text-blue-600 mb-2">
+                            📄 Resume is available for viewing
+                          </p>
+                        )}
+                        <p className="text-sm text-gray-500 mb-4">
+                          Click to update your resume
+                        </p>
+                        <div className="space-y-2">
+                          <div className="flex gap-2 justify-center">
+                            {(jobseekerProfile.resume_url || jobseekerProfile.resume_key) && (
+                              <Button 
+                                variant="outline"
+                                className="border-green-300 text-green-600 hover:bg-green-50 flex items-center gap-2"
+                                onClick={() => setShowResumeViewer(true)}
+                                disabled={uploadingResume}
+                              >
+                                <Eye className="w-4 h-4" />
+                                View Resume
+                              </Button>
+                            )}
+                            <input
+                              type="file"
+                              id="resume-upload"
+                              accept=".pdf,.doc,.docx"
+                              onChange={handleFileChange}
+                              className="hidden"
+                              disabled={uploadingResume}
+                            />
+                            <label htmlFor="resume-upload">
+                              <Button 
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                disabled={uploadingResume}
+                                asChild
+                              >
+                                <span>
+                                  {uploadingResume ? 'Uploading...' : 'Update Resume'}
+                                </span>
+                              </Button>
+                            </label>
+                            <Button 
+                              variant="outline"
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                              onClick={handleResumeDelete}
+                              disabled={uploadingResume}
+                            >
+                              Delete Resume
+                            </Button>
+                          </div>
+                        </div>
                       </div>
-                      <p className="font-medium text-gray-900 mb-1">{jobseekerProfile.resume_filename}</p>
-                      <p className="text-sm text-gray-500 mb-4">
-                        Last updated: Recently
-                      </p>
-                      <div className="space-y-2">
-                        <input
-                          type="file"
-                          id="resume-upload"
-                          accept=".pdf,.doc,.docx"
-                          onChange={handleFileChange}
-                          className="hidden"
-                          disabled={uploadingResume}
-                        />
-                        <label htmlFor="resume-upload">
-                          <Button 
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                    ) : (
+                      <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
+                        <div className="flex items-center justify-center mb-4">
+                          <FileText className="w-8 h-8 text-gray-300" />
+                        </div>
+                        <p className="text-gray-500 mb-4">No resume uploaded yet</p>
+                        <div className="space-y-2">
+                          <input
+                            type="file"
+                            id="resume-upload"
+                            accept=".pdf,.doc,.docx"
+                            onChange={handleFileChange}
+                            className="hidden"
                             disabled={uploadingResume}
-                            asChild
-                          >
-                            <span>
-                              {uploadingResume ? 'Uploading...' : 'Update Resume'}
-                      </span>
-                          </Button>
-                        </label>
-                  </div>
-                </div>
-              ) : (
-                    <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
-                      <div className="flex items-center justify-center mb-4">
-                        <FileText className="w-8 h-8 text-gray-300" />
+                          />
+                          <label htmlFor="resume-upload">
+                            <Button 
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                              disabled={uploadingResume}
+                              asChild
+                            >
+                              <span>
+                                {uploadingResume ? 'Uploading...' : 'Upload Resume'}
+                              </span>
+                            </Button>
+                          </label>
+                          <p className="text-xs text-gray-400">PDF, DOC, or DOCX files only (max 5MB)</p>
+                        </div>
                       </div>
-                      <p className="text-gray-500 mb-4">No resume uploaded yet</p>
-                      <div className="space-y-2">
-                        <input
-                          type="file"
-                          id="resume-upload"
-                          accept=".pdf,.doc,.docx"
-                          onChange={handleFileChange}
-                          className="hidden"
-                          disabled={uploadingResume}
-                        />
-                        <label htmlFor="resume-upload">
-                          <Button 
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
-                            disabled={uploadingResume}
-                            asChild
-                          >
-                            <span>
-                              {uploadingResume ? 'Uploading...' : 'Upload Resume'}
-                      </span>
-                          </Button>
-                        </label>
-                        <p className="text-xs text-gray-400">PDF, DOC, or DOCX files only (max 5MB)</p>
-                      </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    )}
+                </CardContent>
+              </Card>
 
               {/* Skills Section */}
               <Card className="bg-white shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between pb-3">
                   <CardTitle className="text-lg font-semibold text-gray-900">Skills</CardTitle>
                   {editingSection === 'skills' ? (
+                    <div className="flex items-center space-x-2">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setEditingSection(null)}
+                        disabled={saving}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={() => handleSaveSection('skills')}
+                        disabled={saving}
+                      >
+                        {saving ? 'Saving...' : 'Save Skills'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <button 
+                      className="text-gray-400 hover:text-gray-600"
+                      onClick={() => handleEditSection('skills')}
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  {editingSection === 'skills' ? (
+                    <div className="space-y-4">
+                      <div className="flex gap-2">
+                        <Input
+                          value={newSkill}
+                          onChange={(e) => setNewSkill(e.target.value)}
+                          placeholder="Add a skill (e.g., JavaScript, Python, React)"
+                          onKeyPress={(e) => e.key === 'Enter' && addSkillToEdit()}
+                        />
+                        <Button onClick={addSkillToEdit} disabled={!newSkill.trim()}>
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      
+                      {editSkills.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {editSkills.map((skill, index) => (
+                            <Badge 
+                              key={index} 
+                              variant="secondary" 
+                              className="bg-blue-100 text-blue-800 hover:bg-blue-200 flex items-center gap-1"
+                            >
+                              {skill.name}
+                              <button 
+                                onClick={() => removeSkillFromEdit(skill.name)}
+                                className="ml-1 hover:text-blue-900"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      {jobseekerProfile?.skills ? (
+                        <div className="flex flex-wrap gap-2">
+                          {jobseekerProfile.skills.split(',').map((skill, index) => (
+                            <Badge 
+                              key={index} 
+                              variant="secondary" 
+                              className="bg-blue-100 text-blue-800 hover:bg-blue-200"
+                            >
+                              {skill.trim()}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <p className="text-gray-500">No skills added yet</p>
+                          <p className="text-sm text-gray-400 mt-1">
+                            Click the edit button to add your skills
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+          </Card>
+
+              {/* Professional Details Section */}
+              <Card className="bg-white shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <CardTitle className="text-lg font-semibold text-gray-900">Professional Details</CardTitle>
+                  {editingSection === 'professional' ? (
                     <Button 
                       variant="outline" 
                       onClick={() => setEditingSection(null)}
@@ -1153,115 +1395,103 @@ export function Profile() {
                     </Button>
                   ) : (
                     <button 
-                      className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center"
-                      onClick={() => handleEditSection('skills')}
+                      className="text-gray-400 hover:text-gray-600"
+                      onClick={() => handleEditSection('professional')}
                     >
-                      <Plus className="w-4 h-4 text-white" />
+                      <Edit3 className="w-4 h-4" />
                     </button>
                   )}
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {editingSection === 'skills' ? (
-                <div className="space-y-4">
-                  <div className="flex gap-2">
-                    <Input
-                      value={newSkill}
-                      onChange={(e) => setNewSkill(e.target.value)}
-                      placeholder="Add a skill"
-                          onKeyPress={(e) => e.key === 'Enter' && addSkillToEdit()}
-                    />
-                        <Button onClick={addSkillToEdit} disabled={!newSkill.trim()}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                      
-                      {editSkills.map((skill, index) => (
-                        <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <h4 className="font-medium text-gray-900">{skill.name}</h4>
-                              <div className="flex items-center mt-2">
-                                <div className="flex space-x-1">
-                                  {[1, 2, 3, 4, 5].map((level) => (
-                        <button
-                                      key={level}
-                                      onClick={() => updateSkillProficiency(skill.name, level)}
-                                      className={`w-3 h-3 rounded-full ${
-                                        level <= skill.proficiency ? 'bg-blue-600' : 'bg-gray-200'
-                                      }`}
-                                    />
-                                  ))}
-                                </div>
-                                <span className="ml-2 text-sm text-gray-500">
-                                  {getProficiencyLabel(skill.proficiency)}
-                                </span>
-                              </div>
-                            </div>
-                            <button 
-                              className="text-gray-400 hover:text-gray-600"
-                              onClick={() => removeSkillFromEdit(skill.name)}
-                            >
-                              <X className="w-4 h-4" />
-                        </button>
-                          </div>
+                <CardContent>
+                  {editingSection === 'professional' ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Current Company</label>
+                          <Input
+                            value={editJobseekerData.current_company || ''}
+                            onChange={(e) => setEditJobseekerData(prev => ({ ...prev, current_company: e.target.value }))}
+                            placeholder="Your current company"
+                          />
                         </div>
-                      ))}
-                      
-                      <div className="flex justify-end space-x-2">
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setEditingSection(null)}
-                          disabled={saving}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
+                          <Input
+                            value={editJobseekerData.current_job_title || ''}
+                            onChange={(e) => setEditJobseekerData(prev => ({ ...prev, current_job_title: e.target.value }))}
+                            placeholder="Your job title"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Years of Experience</label>
+                          <Input
+                            type="number"
+                            value={editJobseekerData.years_experience || ''}
+                            onChange={(e) => setEditJobseekerData(prev => ({ ...prev, years_experience: parseInt(e.target.value) || 0 }))}
+                            placeholder="Years of experience"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Latest Education</label>
+                        <select
+                          value={editJobseekerData.education || ''}
+                          onChange={(e) => setEditJobseekerData(prev => ({ ...prev, education: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
-                          Cancel
-                        </Button>
-                        <Button 
-                          onClick={() => handleSaveSection('skills')}
-                          disabled={saving}
-                        >
-                          {saving ? 'Saving...' : 'Save Skills'}
-                        </Button>
-                  </div>
-                </div>
-              ) : (
-                    <>
-                  {skills.length > 0 ? (
-                        skills.map((skill, index) => (
-                          <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <h4 className="font-medium text-gray-900">{skill.name}</h4>
-                                <div className="flex items-center mt-2">
-                                  <div className="flex space-x-1">
-                                    {[1, 2, 3, 4, 5].map((level) => (
-                                      <div
-                                        key={level}
-                                        className={`w-3 h-3 rounded-full ${
-                                          level <= skill.proficiency ? 'bg-blue-600' : 'bg-gray-200'
-                                        }`}
-                                      />
-                                    ))}
-                                  </div>
-                                  <span className="ml-2 text-sm text-gray-500">
-                                    {skill.proficiency >= 5 ? 'Expert' : 
-                                     skill.proficiency >= 4 ? 'Advanced' : 
-                                     skill.proficiency >= 3 ? 'Intermediate' : 
-                                     skill.proficiency >= 2 ? 'Beginner' : 'Novice'}
-                      </span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                    ))
+                          <option value="">Select education level</option>
+                          <option value="High School">High School</option>
+                          <option value="Associate Degree">Associate Degree</option>
+                          <option value="Bachelor's Degree">Bachelor's Degree</option>
+                          <option value="Master's Degree">Master's Degree</option>
+                          <option value="PhD">PhD</option>
+                          <option value="Professional Certification">Professional Certification</option>
+                          <option value="Bootcamp">Bootcamp</option>
+                          <option value="Self-taught">Self-taught</option>
+                        </select>
+                      </div>
+                    </div>
                   ) : (
-                        <div className="text-center py-8">
-                          <p className="text-gray-500">No skills added yet. Click the + button to add skills.</p>
-                </div>
-                      )}
-                    </>
-              )}
-            </CardContent>
-          </Card>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-gray-500">Current Company</p>
+                          <p className="font-medium">{jobseekerProfile?.current_company || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Job Title</p>
+                          <p className="font-medium">{jobseekerProfile?.current_job_title || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Years of Experience</p>
+                          <p className="font-medium">{jobseekerProfile?.years_experience || 'Not provided'}</p>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Latest Education</p>
+                        <p className="font-medium">{jobseekerProfile?.education || 'Not provided'}</p>
+                      </div>
+                    </div>
+                  )}
+                  {editingSection === 'professional' && (
+                    <div className="flex justify-end space-x-2 pt-4">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setEditingSection(null)}
+                        disabled={saving}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={() => handleSaveSection('professional')}
+                        disabled={saving}
+                      >
+                        {saving ? 'Saving...' : 'Save Changes'}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Experience Section */}
               <Card className="bg-white shadow-sm">
@@ -1814,11 +2044,14 @@ export function Profile() {
             </CardContent>
           </Card>
 
-              {/* Job Preferences Section */}
+
+
+
+              {/* Languages Section */}
               <Card className="bg-white shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between pb-3">
-                  <CardTitle className="text-lg font-semibold text-gray-900">Job Preferences</CardTitle>
-                  {editingSection === 'jobPreferences' ? (
+                  <CardTitle className="text-lg font-semibold text-gray-900">Languages</CardTitle>
+                  {editingSection === 'languages' ? (
                     <Button 
                       variant="outline" 
                       onClick={() => setEditingSection(null)}
@@ -1829,136 +2062,68 @@ export function Profile() {
                   ) : (
                     <button 
                       className="text-gray-400 hover:text-gray-600"
-                      onClick={() => handleEditSection('jobPreferences')}
+                      onClick={() => handleEditSection('languages')}
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                   )}
-            </CardHeader>
-                <CardContent className="space-y-4">
-                  {editingSection === 'jobPreferences' ? (
+                </CardHeader>
+                <CardContent>
+                  {editingSection === 'languages' ? (
                     <div className="space-y-4">
-                    <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Job Type</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {['Full-time', 'Part-time', 'Contract', 'Internship'].map((type) => (
-                            <button
-                              key={type}
-                              onClick={() => {
-                                const newTypes = editJobPreferences.jobTypes.includes(type)
-                                  ? editJobPreferences.jobTypes.filter(t => t !== type)
-                                  : [...editJobPreferences.jobTypes, type]
-                                setEditJobPreferences(prev => ({ ...prev, jobTypes: newTypes }))
-                              }}
-                              className={`px-3 py-1 rounded-full text-sm ${
-                                editJobPreferences.jobTypes.includes(type)
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                            >
-                              {type}
-                            </button>
-                          ))}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Languages</label>
+                        <Textarea
+                          value={editJobseekerData.languages || ''}
+                          onChange={(e) => setEditJobseekerData(prev => ({ ...prev, languages: e.target.value }))}
+                          placeholder="Enter languages and proficiency levels (JSON format)"
+                          rows={3}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Format: {"[{\"language\": \"English\", \"level\": \"Native\"}, {\"language\": \"Spanish\", \"level\": \"Intermediate\"}]"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                      
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Industry</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {['Technology', 'Fintech', 'Healthcare', 'Education', 'Marketing', 'Sales'].map((industry) => (
-                            <button
-                              key={industry}
-                              onClick={() => {
-                                const newIndustries = editJobPreferences.industries.includes(industry)
-                                  ? editJobPreferences.industries.filter(i => i !== industry)
-                                  : [...editJobPreferences.industries, industry]
-                                setEditJobPreferences(prev => ({ ...prev, industries: newIndustries }))
-                              }}
-                              className={`px-3 py-1 rounded-full text-sm ${
-                                editJobPreferences.industries.includes(industry)
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                            >
-                              {industry}
-                            </button>
-                          ))}
+                  ) : (
+                    <div className="space-y-2">
+                      {jobseekerProfile?.languages ? (
+                        <div>
+                          <p className="text-sm text-gray-500 mb-2">Languages</p>
+                          <div className="space-y-2">
+                            {(() => {
+                              try {
+                                const languages = JSON.parse(jobseekerProfile.languages);
+                                if (Array.isArray(languages)) {
+                                  return languages.map((lang, index) => (
+                                    <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                                      <span className="font-medium text-gray-900">{lang.language}</span>
+                                      <span className="text-sm text-gray-600 bg-blue-100 px-2 py-1 rounded-full">
+                                        {lang.level}
+                                      </span>
+                                    </div>
+                                  ));
+                                }
+                              } catch (e) {
+                                // If JSON parsing fails, show as raw text
+                                return (
+                                  <div className="bg-gray-50 rounded-lg p-3">
+                                    <p className="font-medium text-gray-900">{jobseekerProfile.languages}</p>
+                                    <p className="text-xs text-gray-500 mt-1">Raw format (not JSON)</p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
                         </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Salary Range</label>
-                        <Input
-                          value={editJobPreferences.salaryRange}
-                          onChange={(e) => setEditJobPreferences(prev => ({ ...prev, salaryRange: e.target.value }))}
-                          placeholder="e.g., $80k - $120k"
-                        />
-                      </div>
-                      
-                      <div className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id="remote-work"
-                          checked={editJobPreferences.remote}
-                          onChange={(e) => setEditJobPreferences(prev => ({ ...prev, remote: e.target.checked }))}
-                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        <label htmlFor="remote-work" className="ml-2 text-sm font-medium text-gray-900">
-                          Open to remote work
-                        </label>
-                      </div>
-                      
-                      <div className="flex justify-end space-x-2">
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setEditingSection(null)}
-                          disabled={saving}
-                        >
-                          Cancel
-                        </Button>
-                        <Button 
-                          onClick={() => handleSaveSection('jobPreferences')}
-                          disabled={saving}
-                        >
-                          {saving ? 'Saving...' : 'Save Preferences'}
-                  </Button>
-                      </div>
-                </div>
-              ) : (
-                    <>
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Job Type</h4>
-                        <div className="flex space-x-2">
-                          {jobPreferences.jobTypes.map((type) => (
-                            <Badge key={type} variant="default" className="bg-blue-600 text-white">
-                              {type}
-                            </Badge>
-                          ))}
-                          {jobPreferences.remote && (
-                            <Badge variant="outline" className="text-gray-600">Remote</Badge>
-                          )}
-                </div>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Industry</h4>
-                        <div className="flex space-x-2">
-                          {jobPreferences.industries.map((industry) => (
-                            <Badge key={industry} variant="default" className="bg-blue-600 text-white">
-                              {industry}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-2">Salary Range</h4>
-                        <p className="text-gray-700 font-semibold">{jobPreferences.salaryRange}</p>
-                      </div>
-                    </>
-              )}
-            </CardContent>
-          </Card>
+                      ) : (
+                        <p className="text-gray-500">No languages added yet</p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
 
               {/* Privacy Settings Section */}
               <Card className="bg-white shadow-sm">
@@ -2094,9 +2259,27 @@ export function Profile() {
                       <div>
                         <h4 className="font-medium text-gray-900 mb-1">Company Exclusions</h4>
                         <p className="text-sm text-gray-500 mb-3">Hide profile from specific companies</p>
-                        <button className="text-blue-600 hover:underline text-sm font-medium">
-                          Manage List
-                        </button>
+                        {jobseekerProfile?.privacy_excluded_companies ? (
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap gap-2">
+                              {jobseekerProfile.privacy_excluded_companies.split(',').filter(company => company.trim()).map((company, index) => (
+                                <span key={index} className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">
+                                  {company.trim()}
+                                </span>
+                              ))}
+                            </div>
+                            <button className="text-blue-600 hover:underline text-sm font-medium">
+                              Manage List
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-gray-500 text-sm">
+                            No companies excluded
+                            <button className="text-blue-600 hover:underline text-sm font-medium ml-2">
+                              Add Companies
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
@@ -2307,6 +2490,35 @@ export function Profile() {
           )}
         </div>
       )}
+
+      {/* Resume Viewer Modal */}
+      <ResumeViewer
+        resumeUrl={jobseekerProfile?.resume_url || (jobseekerProfile?.resume_key ? `${getApiBaseUrl()}/files/download?file_path=uploads/resumes/${jobseekerProfile.resume_key}` : undefined)}
+        resumeFilename={jobseekerProfile?.resume_filename}
+        isOpen={showResumeViewer}
+        onClose={() => setShowResumeViewer(false)}
+        onDownload={() => {
+          if (!jobseekerProfile) return;
+          
+          const resumeUrl = jobseekerProfile.resume_url || 
+            (jobseekerProfile.resume_key ? 
+              `${getApiBaseUrl()}/files/download?file_path=uploads/resumes/${jobseekerProfile.resume_key}` : 
+              undefined);
+              
+          if (resumeUrl) {
+            // For S3 URLs, open in new tab for download
+            if (resumeUrl.includes('amazonaws.com') || resumeUrl.includes('s3')) {
+              window.open(resumeUrl, '_blank');
+            } else {
+              // For local URLs, use download link
+              const link = document.createElement('a');
+              link.href = resumeUrl;
+              link.download = jobseekerProfile.resume_filename || 'resume.pdf';
+              link.click();
+            }
+          }
+        }}
+      />
       </div>
     </div>
   )

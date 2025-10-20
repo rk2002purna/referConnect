@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import WebSocket, WebSocketDisconnect, Depends
 
 from app.core.config import settings
 from app.api.v1.router import api_router_v1
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 
 
 def create_app() -> FastAPI:
@@ -27,6 +30,25 @@ def create_app() -> FastAPI:
         return {"status": "ok", "message": "ReferConnect API is running"}
 
     app.include_router(api_router_v1, prefix="/api/v1")
+
+    # In-memory connection mapping (demo only; replace with Redis pub/sub for scale)
+    user_connections: dict[int, set[WebSocket]] = {}
+
+    @app.websocket("/ws/notifications")
+    async def notifications_ws(websocket: WebSocket, user: User = Depends(get_current_user)):
+        await websocket.accept()
+        user_set = user_connections.setdefault(user.id, set())
+        user_set.add(websocket)
+        try:
+            while True:
+                # Keep connection alive; no inbound messages expected
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            pass
+        finally:
+            user_set.discard(websocket)
+            if not user_set:
+                user_connections.pop(user.id, None)
 
     return app
 

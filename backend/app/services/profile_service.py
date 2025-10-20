@@ -43,7 +43,10 @@ class ProfileService:
             location=user.location,
             website=user.website,
             is_email_verified=user.is_email_verified,
-            is_active=user.is_active
+            is_active=user.is_active,
+            resume_filename=user.resume_filename,
+            resume_url=user.resume_url,
+            resume_key=user.resume_key
         )
 
     def update_profile(self, user_id: int, profile_data: ProfileUpdateRequest) -> ProfileResponse:
@@ -74,14 +77,38 @@ class ProfileService:
         if not jobseeker:
             return None
         
+        # Get user information for resume fields
+        user_result = self.db.exec(
+            select(User).where(User.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        
         return JobSeekerProfileResponse(
             user_id=jobseeker.user_id,
             skills=jobseeker.skills,
             years_experience=jobseeker.years_experience,
             current_company=jobseeker.current_company,
+            current_job_title=jobseeker.current_job_title,
+            education=jobseeker.education,
+            certifications=jobseeker.certifications,
+            preferred_job_types=jobseeker.preferred_job_types,
+            salary_expectation_min=jobseeker.salary_expectation_min,
+            salary_expectation_max=jobseeker.salary_expectation_max,
+            salary_currency=jobseeker.salary_currency,
+            notice_period=jobseeker.notice_period,
+            availability=jobseeker.availability,
+            industries=jobseeker.industries,
+            willing_to_relocate=jobseeker.willing_to_relocate,
+            work_authorization=jobseeker.work_authorization,
+            languages=jobseeker.languages,
+            portfolio_url=jobseeker.portfolio_url,
+            linkedin_url=jobseeker.linkedin_url,
+            github_url=jobseeker.github_url,
             privacy_excluded_companies=jobseeker.privacy_excluded_companies,
             trust_score=jobseeker.trust_score,
-            resume_filename=jobseeker.resume_filename
+            resume_filename=user.resume_filename if user else None,
+            resume_url=user.resume_url if user else None,
+            resume_key=user.resume_key if user else None
         )
 
     def update_jobseeker_profile(self, user_id: int, profile_data: JobSeekerProfileUpdateRequest) -> JobSeekerProfileResponse:
@@ -99,6 +126,22 @@ class ProfileService:
                 skills=profile_data.skills,
                 years_experience=profile_data.years_experience,
                 current_company=profile_data.current_company,
+                current_job_title=profile_data.current_job_title,
+                education=profile_data.education,
+                certifications=profile_data.certifications,
+                preferred_job_types=profile_data.preferred_job_types,
+                salary_expectation_min=profile_data.salary_expectation_min,
+                salary_expectation_max=profile_data.salary_expectation_max,
+                salary_currency=profile_data.salary_currency,
+                notice_period=profile_data.notice_period,
+                availability=profile_data.availability,
+                industries=profile_data.industries,
+                willing_to_relocate=profile_data.willing_to_relocate,
+                work_authorization=profile_data.work_authorization,
+                languages=profile_data.languages,
+                portfolio_url=profile_data.portfolio_url,
+                linkedin_url=profile_data.linkedin_url,
+                github_url=profile_data.github_url,
                 privacy_excluded_companies=profile_data.privacy_excluded_companies,
                 trust_score=0
             )
@@ -187,6 +230,20 @@ class ProfileService:
         with open(file_path, 'wb') as f:
             f.write(file_content)
         
+        # Generate proper URL for the file
+        file_url = f"/api/v1/files/download?file_path={str(file_path)}"
+        
+        # Update user with resume info
+        self.db.exec(
+            update(User)
+            .where(User.id == user_id)
+            .values(
+                resume_filename=filename,
+                resume_url=file_url,  # Use proper URL for file access
+                resume_key=unique_filename
+            )
+        )
+        
         # Update jobseeker profile with resume info
         result = self.db.exec(
             select(JobSeeker).where(JobSeeker.user_id == user_id)
@@ -198,7 +255,6 @@ class ProfileService:
             jobseeker = JobSeeker(
                 user_id=user_id,
                 resume_filename=filename,
-                resume_path=str(file_path),
                 trust_score=0
             )
             self.db.add(jobseeker)
@@ -208,8 +264,7 @@ class ProfileService:
                 update(JobSeeker)
                 .where(JobSeeker.user_id == user_id)
                 .values(
-                    resume_filename=filename,
-                    resume_path=str(file_path)
+                    resume_filename=filename
                 )
             )
         
@@ -217,13 +272,72 @@ class ProfileService:
         
         return {
             "filename": filename,
+            "url": file_url,
             "path": str(file_path),
             "size": len(file_content),
             "uploaded_at": datetime.utcnow().isoformat()
         }
 
+    def get_resume_info(self, user_id: int) -> Dict[str, Any]:
+        """Get resume information for jobseeker"""
+        user = self.db.get(User, user_id)
+        
+        if not user:
+            raise ValueError("User not found")
+        
+        if not user.resume_filename:
+            return {"message": "No resume uploaded"}
+        
+        return {
+            "filename": user.resume_filename,
+            "url": user.resume_url,
+            "key": user.resume_key,
+            "uploaded_at": user.updated_at.isoformat() if user.updated_at else None
+        }
+
+    def delete_resume(self, user_id: int) -> Dict[str, Any]:
+        """Delete resume for jobseeker"""
+        user = self.db.get(User, user_id)
+        
+        if not user:
+            raise ValueError("User not found")
+        
+        if not user.resume_filename:
+            return {"message": "No resume to delete"}
+        
+        # Delete file if it exists
+        if user.resume_url and os.path.exists(user.resume_url):
+            try:
+                os.remove(user.resume_url)
+            except Exception as e:
+                print(f"Warning: Could not delete file {user.resume_url}: {e}")
+        
+        # Clear resume fields
+        self.db.exec(
+            update(User)
+            .where(User.id == user_id)
+            .values(
+                resume_filename=None,
+                resume_url=None,
+                resume_key=None
+            )
+        )
+        
+        # Update jobseeker profile
+        self.db.exec(
+            update(JobSeeker)
+            .where(JobSeeker.user_id == user_id)
+            .values(
+                resume_filename=None
+            )
+        )
+        
+        self.db.commit()
+        
+        return {"message": "Resume deleted successfully"}
+
     def get_profile_completion(self, user_id: int) -> ProfileCompletionResponse:
-        """Calculate profile completion percentage"""
+        """Calculate profile completion percentage - simplified and more reliable"""
         # Get user profile
         result = self.db.exec(
             select(User).where(User.id == user_id)
@@ -233,114 +347,89 @@ class ProfileService:
         if not user:
             raise ValueError("User not found")
         
-        # Calculate basic info completion
-        basic_fields = ['first_name', 'last_name', 'phone', 'linkedin_url', 'bio', 'location']
-        basic_completed = sum(1 for field in basic_fields if getattr(user, field) is not None)
-        basic_completion = int((basic_completed / len(basic_fields)) * 100)
-        
-        # Calculate role-specific completion
+        # Simplified completion logic
+        basic_completion = 0
         jobseeker_completion = 0
         employee_completion = 0
+        overall_completion = 0
+        missing_fields = []
+        is_complete = False
         
-        # Check experience, education, and certifications for all users
-        from app.models.user import Experience, Education, Certification
+        # Check basic required fields
+        basic_required = ['first_name', 'last_name', 'email']
+        basic_optional = ['phone', 'linkedin_url', 'bio', 'location']
         
-        exp_result = self.db.exec(
-            select(Experience).where(Experience.user_id == user_id)
-        )
-        has_experience = exp_result.scalar_one_or_none() is not None
+        basic_required_completed = sum(1 for field in basic_required if getattr(user, field) is not None and getattr(user, field) != '')
+        basic_optional_completed = sum(1 for field in basic_optional if getattr(user, field) is not None and getattr(user, field) != '')
         
-        edu_result = self.db.exec(
-            select(Education).where(Education.user_id == user_id)
-        )
-        has_education = edu_result.scalar_one_or_none() is not None
+        # Basic completion is based on required fields (must be 100%) + some optional fields
+        basic_completion = min(100, int((basic_required_completed / len(basic_required)) * 100 + (basic_optional_completed / len(basic_optional)) * 20))
         
-        cert_result = self.db.exec(
-            select(Certification).where(Certification.user_id == user_id)
-        )
-        has_certifications = cert_result.scalar_one_or_none() is not None
+        # Check missing basic fields
+        if not user.first_name:
+            missing_fields.append("First Name")
+        if not user.last_name:
+            missing_fields.append("Last Name")
+        if not user.email:
+            missing_fields.append("Email")
         
         if user.role.value == 'jobseeker':
+            # For jobseekers, check if they have a jobseeker profile
             result = self.db.exec(
                 select(JobSeeker).where(JobSeeker.user_id == user_id)
             )
             jobseeker = result.scalar_one_or_none()
             
             if jobseeker:
-                jobseeker_fields = ['skills', 'years_experience', 'current_company', 'resume_filename']
-                jobseeker_completed = sum(1 for field in jobseeker_fields if getattr(jobseeker, field) is not None)
+                # Check key jobseeker fields
+                jobseeker_required = ['skills', 'years_experience', 'current_company']
+                jobseeker_optional = ['education', 'certifications', 'resume_filename']
                 
-                # Add experience, education, and certifications completion
-                additional_fields = [has_experience, has_education, has_certifications]
-                additional_completed = sum(1 for field in additional_fields if field)
+                required_completed = sum(1 for field in jobseeker_required if getattr(jobseeker, field) is not None and getattr(jobseeker, field) != '')
+                optional_completed = sum(1 for field in jobseeker_optional if getattr(jobseeker, field) is not None and getattr(jobseeker, field) != '')
                 
-                total_fields = len(jobseeker_fields) + len(additional_fields)
-                total_completed = jobseeker_completed + additional_completed
-                jobseeker_completion = int((total_completed / total_fields) * 100)
-        
+                jobseeker_completion = min(100, int((required_completed / len(jobseeker_required)) * 80 + (optional_completed / len(jobseeker_optional)) * 20))
+                
+                # Check missing jobseeker fields
+                if not jobseeker.skills:
+                    missing_fields.append("Skills")
+                if not jobseeker.years_experience:
+                    missing_fields.append("Years of Experience")
+                if not jobseeker.current_company:
+                    missing_fields.append("Current Company")
+            else:
+                missing_fields.append("Jobseeker Profile")
+                jobseeker_completion = 0
+                
         elif user.role.value == 'employee':
+            # For employees, check if they have an employee profile
             result = self.db.exec(
                 select(Employee).where(Employee.user_id == user_id)
             )
             employee = result.scalar_one_or_none()
             
             if employee:
-                employee_fields = ['title', 'company_id']
-                employee_completed = sum(1 for field in employee_fields if getattr(employee, field) is not None)
-                
-                # Add experience, education, and certifications completion for employees too
-                additional_fields = [has_experience, has_education, has_certifications]
-                additional_completed = sum(1 for field in additional_fields if field)
-                
-                total_fields = len(employee_fields) + len(additional_fields)
-                total_completed = employee_completed + additional_completed
-                employee_completion = int((total_completed / total_fields) * 100)
+                # Employees are considered complete if they have basic info + employee profile exists
+                employee_completion = 100
+            else:
+                missing_fields.append("Employee Profile")
+                employee_completion = 0
         
         # Calculate overall completion
-        overall_completion = (basic_completion + jobseeker_completion + employee_completion) // 3
-        
-        # Determine missing fields
-        missing_fields = []
-        if not user.first_name:
-            missing_fields.append("First Name")
-        if not user.last_name:
-            missing_fields.append("Last Name")
-        if not user.phone:
-            missing_fields.append("Phone")
-        if not user.linkedin_url:
-            missing_fields.append("LinkedIn URL")
-        if not user.bio:
-            missing_fields.append("Bio")
-        if not user.location:
-            missing_fields.append("Location")
-        
-        # Check for missing experience, education, and certifications for all users
-        if not has_experience:
-            missing_fields.append("Experience")
-        if not has_education:
-            missing_fields.append("Education")
-        if not has_certifications:
-            missing_fields.append("Certifications")
-        
         if user.role.value == 'jobseeker':
-            result = self.db.exec(
-                select(JobSeeker).where(JobSeeker.user_id == user_id)
-            )
-            jobseeker = result.scalar_one_or_none()
-            
-            if jobseeker:
-                if not jobseeker.skills:
-                    missing_fields.append("Skills")
-                if not jobseeker.years_experience:
-                    missing_fields.append("Years of Experience")
-                if not jobseeker.resume_filename:
-                    missing_fields.append("Resume")
-        
-        # Determine if onboarding is complete (overall completion >= 70% for employees, 80% for jobseekers)
-        if user.role.value == 'employee':
-            is_complete = overall_completion >= 70
+            overall_completion = (basic_completion + jobseeker_completion) // 2
         else:
-            is_complete = overall_completion >= 80
+            overall_completion = (basic_completion + employee_completion) // 2
+        
+        # Determine if onboarding is complete
+        # For employees: complete if they have basic required fields + employee profile
+        # For jobseekers: complete if they have basic required fields + some jobseeker data
+        if user.role.value == 'employee':
+            is_complete = (basic_required_completed == len(basic_required) and 
+                          self.db.exec(select(Employee).where(Employee.user_id == user_id)).scalar_one_or_none() is not None)
+        else:
+            is_complete = (basic_required_completed == len(basic_required) and 
+                          self.db.exec(select(JobSeeker).where(JobSeeker.user_id == user_id)).scalar_one_or_none() is not None)
 
         return ProfileCompletionResponse(
             basic_info_completion=basic_completion,

@@ -3,7 +3,9 @@ import { Input } from '../ui/Input'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { OnboardingStepProps } from '../../types/onboarding'
-import { MapPin, Briefcase, DollarSign, Clock, Globe } from 'lucide-react'
+import { getSalaryConfig } from '../../lib/salaryConfig'
+import { getWorkAuthOptions } from '../../lib/workAuthConfig'
+import { MapPin, Briefcase, Clock, Globe } from 'lucide-react'
 
 const JOB_TYPES = [
   'Full-time',
@@ -30,14 +32,7 @@ const INDUSTRIES = [
   'Other'
 ]
 
-const SALARY_RANGES = [
-  { label: 'Under $30k', min: 0, max: 30000 },
-  { label: '$30k - $50k', min: 30000, max: 50000 },
-  { label: '$50k - $75k', min: 50000, max: 75000 },
-  { label: '$75k - $100k', min: 75000, max: 100000 },
-  { label: '$100k - $150k', min: 100000, max: 150000 },
-  { label: '$150k+', min: 150000, max: 1000000 }
-]
+// Salary ranges will be determined dynamically based on country code
 
 const NOTICE_PERIODS = [
   { label: 'Immediately available', value: 0 },
@@ -49,6 +44,10 @@ const NOTICE_PERIODS = [
 ]
 
 export default function LocationPreferencesStep({ data, updateData }: OnboardingStepProps) {
+  // Get salary configuration based on phone country code
+  const countryCode = data.phone_country_code || '+91' // Default to India
+  const salaryConfig = getSalaryConfig(countryCode)
+  const workAuthOptions = getWorkAuthOptions(countryCode)
   const handleJobTypeToggle = (jobType: string) => {
     const currentTypes = data.jobseeker?.preferred_job_types || []
     const newTypes = currentTypes.includes(jobType)
@@ -84,7 +83,7 @@ export default function LocationPreferencesStep({ data, updateData }: Onboarding
         salary_expectation: {
           min: range.min,
           max: range.max,
-          currency: 'USD'
+          currency: salaryConfig.currency
         }
       }
     })
@@ -167,10 +166,10 @@ export default function LocationPreferencesStep({ data, updateData }: Onboarding
       {/* Salary Expectation */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">
-          Salary Expectation
+          Salary Expectation ({salaryConfig.currency})
         </label>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {SALARY_RANGES.map((range) => (
+          {salaryConfig.ranges.map((range) => (
             <Button
               key={range.label}
               type="button"
@@ -180,11 +179,16 @@ export default function LocationPreferencesStep({ data, updateData }: Onboarding
               onClick={() => handleSalaryRangeSelect(range)}
               className="justify-start"
             >
-              <DollarSign className="w-4 h-4 mr-2" />
               {range.label}
             </Button>
           ))}
         </div>
+        <p className="mt-2 text-xs text-gray-500">
+          {countryCode === '+91' 
+            ? 'LPA = Lakhs Per Annum (₹1 Lakh = ₹100,000)'
+            : `Salary ranges in ${salaryConfig.currency} per year`
+          }
+        </p>
       </div>
 
       {/* Notice Period */}
@@ -252,7 +256,7 @@ export default function LocationPreferencesStep({ data, updateData }: Onboarding
       {/* Work Authorization */}
       <div>
         <label htmlFor="work_authorization" className="block text-sm font-medium text-gray-700 mb-2">
-          Work Authorization
+          Work Authorization ({countryCode === '+91' ? 'India' : countryCode === '+1' ? 'US' : countryCode === '+44' ? 'UK' : countryCode === '+49' ? 'Germany' : countryCode === '+86' ? 'China' : 'International'})
         </label>
         <select
           id="work_authorization"
@@ -266,13 +270,18 @@ export default function LocationPreferencesStep({ data, updateData }: Onboarding
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         >
           <option value="">Select work authorization status</option>
-          <option value="citizen">US Citizen</option>
-          <option value="permanent_resident">Permanent Resident</option>
-          <option value="h1b">H1B Visa</option>
-          <option value="f1_opt">F1 OPT</option>
-          <option value="other_visa">Other Visa</option>
-          <option value="requires_sponsorship">Requires Sponsorship</option>
+          {workAuthOptions.map((option) => (
+            <option key={option.value} value={option.value} title={option.description}>
+              {option.label}
+            </option>
+          ))}
         </select>
+        <p className="mt-1 text-xs text-gray-500">
+          {countryCode === '+91' 
+            ? 'Select your work authorization status in India'
+            : `Select your work authorization status for ${countryCode === '+1' ? 'United States' : countryCode === '+44' ? 'United Kingdom' : countryCode === '+49' ? 'Germany' : countryCode === '+86' ? 'China' : 'your country'}`
+          }
+        </p>
       </div>
 
       {/* Selected Preferences Summary */}

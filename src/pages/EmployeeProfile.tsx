@@ -181,6 +181,7 @@ export function EmployeeProfile() {
       // Load company data from localStorage (since backend doesn't support these fields)
       const savedCompanyData = localStorage.getItem('employee_company_data')
       let companyData: {
+        company_name?: string
         company_industry?: string
         company_email?: string
         office_location?: string
@@ -195,24 +196,41 @@ export function EmployeeProfile() {
         } catch (err) {
           console.error('Failed to parse saved company data:', err)
         }
+      } else {
+        console.log('No saved company data found in localStorage')
       }
       
+      console.log('Verification data:', verification)
+      console.log('Profile data:', profile)
+      console.log('Final company name mapping:', {
+        'companyData.company_name': companyData.company_name,
+        'verification?.company_name': verification?.company_name,
+        'final company_name': companyData.company_name || verification?.company_name || ''
+      })
+      
+      // Debug: Check if we have any company data at all
+      console.log('All available data sources:', {
+        localStorage: savedCompanyData,
+        verification: verification,
+        profile: profile
+      })
+      
       setProfileData({
-        first_name: profile.first_name || 'Doddi Purna Gana Rama',
-        last_name: profile.last_name || 'Krishna',
+        first_name: profile.first_name || '',
+        last_name: profile.last_name || '',
         email: profile.email,
         phone: profile.phone || '',
-        location: profile.location || 'Chennai',
+        location: profile.location || '',
         bio: profile.bio || '',
         linkedin_url: profile.linkedin_url || '',
         profile_picture: profile.profile_picture || '',
-        company_name: verification?.company_name || 'TechCorp Inc.',
+        company_name: companyData.company_name || verification?.company_name || '',
         company_logo: '',
-        company_industry: companyData.company_industry || 'Technology',
-        company_email: companyData.company_email || profile.email || 'dineshase@gmail.com',
+        company_industry: companyData.company_industry || '',
+        company_email: companyData.company_email || profile.email || '',
         job_title: companyData.job_title || employeeProfile?.title || '',
         department: companyData.department || '',
-        office_location: companyData.office_location || profile.location || 'Chennai',
+        office_location: companyData.office_location || profile.location || '',
         years_at_company: companyData.years_at_company || 0,
         referral_areas: ['Product Management', 'UX Design', 'Engineering', 'Data Science'],
         notification_preferences: {

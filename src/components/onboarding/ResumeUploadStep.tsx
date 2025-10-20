@@ -1,15 +1,44 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Button } from '../ui/Button'
 import { Card, CardContent } from '../ui/Card'
 import { OnboardingStepProps } from '../../types/onboarding'
-import { Upload, FileText, CheckCircle, AlertCircle, X } from 'lucide-react'
-import { profileAPI } from '../../lib/api'
+import { Upload, FileText, CheckCircle, AlertCircle, X, Download, Eye, Trash2, RefreshCw } from 'lucide-react'
+import { s3FileService } from '../../lib/s3Service'
+import { validateFile, formatFileSize, getFileIcon, FileInfo } from '../../lib/s3Config'
+import { ResumeViewer } from '../ResumeViewer'
+
+interface FileUploadState {
+  isUploading: boolean
+  uploadError: string
+  uploadSuccess: boolean
+  currentFile: FileInfo | null
+}
 
 export default function ResumeUploadStep({ data, updateData }: OnboardingStepProps) {
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadError, setUploadError] = useState('')
-  const [uploadSuccess, setUploadSuccess] = useState(false)
+  const [uploadState, setUploadState] = useState<FileUploadState>({
+    isUploading: false,
+    uploadError: '',
+    uploadSuccess: false,
+    currentFile: null
+  })
+  
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [userId, setUserId] = useState<string>('')
+  const [showResumeViewer, setShowResumeViewer] = useState(false)
+
+  // Get user ID from localStorage or API
+  useEffect(() => {
+    const token = localStorage.getItem('access_token')
+    if (token) {
+      // Decode JWT token to get user ID (simplified)
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        setUserId(payload.sub || payload.user_id)
+      } catch (error) {
+        console.error('Error decoding token:', error)
+      }
+    }
+  }, [])
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -19,37 +48,58 @@ export default function ResumeUploadStep({ data, updateData }: OnboardingStepPro
   }
 
   const handleFileUpload = async (file: File) => {
-    // Validate file type
-    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-    if (!allowedTypes.includes(file.type)) {
-      setUploadError('Please upload a PDF or Word document')
+    // Validate file
+    const validation = validateFile(file)
+    if (!validation.isValid) {
+      setUploadState(prev => ({
+        ...prev,
+        uploadError: validation.error || 'Invalid file',
+        uploadSuccess: false
+      }))
       return
     }
 
-    // Validate file size (5MB limit)
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError('File size must be less than 5MB')
-      return
-    }
-
-    setIsUploading(true)
-    setUploadError('')
-    setUploadSuccess(false)
+    setUploadState(prev => ({
+      ...prev,
+      isUploading: true,
+      uploadError: '',
+      uploadSuccess: false
+    }))
 
     try {
-      const response = await profileAPI.uploadResume(file)
+      const response = await s3FileService.uploadFile(file, userId)
+      
+      const fileInfo: FileInfo = {
+        fileName: response.fileName,
+        fileUrl: response.fileUrl,
+        fileKey: response.fileKey,
+        fileSize: response.fileSize,
+        uploadedAt: response.uploadedAt,
+        contentType: file.type
+      }
+
       updateData({
         jobseeker: {
           ...data.jobseeker,
-          resume_filename: (response.data as any).filename
+          resume_filename: response.fileName,
+          resume_url: response.fileUrl,
+          resume_key: response.fileKey
         }
       })
-      setUploadSuccess(true)
+
+      setUploadState(prev => ({
+        ...prev,
+        isUploading: false,
+        uploadSuccess: true,
+        currentFile: fileInfo
+      }))
     } catch (error: any) {
       console.error('Resume upload failed:', error)
-      setUploadError(error.response?.data?.detail || 'Failed to upload resume. Please try again.')
-    } finally {
-      setIsUploading(false)
+      setUploadState(prev => ({
+        ...prev,
+        isUploading: false,
+        uploadError: error.message || 'Failed to upload resume. Please try again.'
+      }))
     }
   }
 
@@ -65,22 +115,73 @@ export default function ResumeUploadStep({ data, updateData }: OnboardingStepPro
     event.preventDefault()
   }
 
-  const handleRemoveFile = () => {
-    updateData({
-      jobseeker: {
-        ...data.jobseeker,
-        resume_filename: undefined
+  const handleRemoveFile = async () => {
+    if (uploadState.currentFile) {
+      try {
+        await s3FileService.deleteFile(uploadState.currentFile.fileKey)
+        
+        updateData({
+          jobseeker: {
+            ...data.jobseeker,
+            resume_filename: undefined,
+            resume_url: undefined,
+            resume_key: undefined
+          }
+        })
+
+        setUploadState({
+          isUploading: false,
+          uploadError: '',
+          uploadSuccess: false,
+          currentFile: null
+        })
+      } catch (error) {
+        console.error('Failed to delete file:', error)
+        setUploadState(prev => ({
+          ...prev,
+          uploadError: 'Failed to delete file. Please try again.'
+        }))
       }
-    })
-    setUploadSuccess(false)
-    setUploadError('')
+    }
+
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
+  const handleDownloadFile = async () => {
+    if (uploadState.currentFile) {
+      try {
+        const downloadUrl = await s3FileService.getDownloadUrl(uploadState.currentFile.fileKey)
+        window.open(downloadUrl, '_blank')
+      } catch (error) {
+        console.error('Failed to get download URL:', error)
+        setUploadState(prev => ({
+          ...prev,
+          uploadError: 'Failed to download file. Please try again.'
+        }))
+      }
+    }
+  }
+
+  const handleViewFile = () => {
+    if (uploadState.currentFile) {
+      setShowResumeViewer(true)
+    }
+  }
+
   const openFileDialog = () => {
     fileInputRef.current?.click()
+  }
+
+  const handleReupload = () => {
+    setUploadState(prev => ({
+      ...prev,
+      uploadSuccess: false,
+      uploadError: '',
+      currentFile: null
+    }))
+    openFileDialog()
   }
 
   return (
@@ -95,9 +196,9 @@ export default function ResumeUploadStep({ data, updateData }: OnboardingStepPro
 
         <Card
           className={`border-2 border-dashed transition-colors ${
-            uploadSuccess
+            uploadState.uploadSuccess
               ? 'border-green-300 bg-green-50'
-              : uploadError
+              : uploadState.uploadError
               ? 'border-red-300 bg-red-50'
               : 'border-gray-300 hover:border-blue-400'
           }`}
@@ -108,51 +209,95 @@ export default function ResumeUploadStep({ data, updateData }: OnboardingStepPro
               onDragOver={handleDragOver}
               className="text-center"
             >
-              {uploadSuccess ? (
+              {uploadState.uploadSuccess && uploadState.currentFile ? (
                 <div className="space-y-4">
                   <CheckCircle className="w-12 h-12 text-green-600 mx-auto" />
                   <div>
                     <h4 className="text-lg font-medium text-green-900">Resume Uploaded Successfully!</h4>
-                    <p className="text-sm text-green-700">
-                      {data.jobseeker?.resume_filename}
-                    </p>
+                    <div className="flex items-center justify-center space-x-2 mt-2">
+                      <span className="text-2xl">{getFileIcon(uploadState.currentFile.fileName)}</span>
+                      <div className="text-left">
+                        <p className="text-sm font-medium text-green-800">
+                          {uploadState.currentFile.fileName}
+                        </p>
+                        <p className="text-xs text-green-600">
+                          {formatFileSize(uploadState.currentFile.fileSize)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    onClick={handleRemoveFile}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Remove Resume
-                  </Button>
+                  
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleViewFile}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleDownloadFile}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleReupload}
+                      className="text-orange-600 hover:text-orange-700"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Reupload
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleRemoveFile}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
                   <Upload className="w-12 h-12 text-gray-400 mx-auto" />
                   <div>
                     <h4 className="text-lg font-medium text-gray-900">
-                      {isUploading ? 'Uploading...' : 'Upload your resume'}
+                      {uploadState.isUploading ? 'Uploading...' : 'Upload your resume'}
                     </h4>
                     <p className="text-sm text-gray-600">
                       Drag and drop your resume here, or click to browse
                     </p>
                   </div>
                   
-                  {uploadError && (
+                  {uploadState.uploadError && (
                     <div className="flex items-center justify-center space-x-2 text-red-600">
                       <AlertCircle className="w-4 h-4" />
-                      <span className="text-sm">{uploadError}</span>
+                      <span className="text-sm">{uploadState.uploadError}</span>
                     </div>
                   )}
 
                   <div className="space-y-2">
                     <Button
                       onClick={openFileDialog}
-                      disabled={isUploading}
+                      disabled={uploadState.isUploading}
                       className="w-full sm:w-auto"
                     >
-                      <FileText className="w-4 h-4 mr-2" />
-                      {isUploading ? 'Uploading...' : 'Choose File'}
+                      {uploadState.isUploading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-4 h-4 mr-2" />
+                          Choose File
+                        </>
+                      )}
                     </Button>
                     <p className="text-xs text-gray-500">
                       Supported formats: PDF, DOC, DOCX (Max 5MB)
@@ -210,12 +355,21 @@ export default function ResumeUploadStep({ data, updateData }: OnboardingStepPro
           <div className="flex items-start space-x-3">
             <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
             <div>
-              <h5 className="text-sm font-medium text-gray-900">Privacy Protected</h5>
-              <p className="text-xs text-gray-600">You control who can see your resume and personal information</p>
+              <h5 className="text-sm font-medium text-gray-900">Secure Storage</h5>
+              <p className="text-xs text-gray-600">Your files are securely stored in AWS S3 with full control</p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Resume Viewer Modal */}
+      <ResumeViewer
+        resumeUrl={uploadState.currentFile?.fileUrl}
+        resumeFilename={uploadState.currentFile?.fileName}
+        isOpen={showResumeViewer}
+        onClose={() => setShowResumeViewer(false)}
+        onDownload={handleDownloadFile}
+      />
     </div>
   )
 }

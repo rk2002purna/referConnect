@@ -9,7 +9,11 @@ from app.models.user import User, UserRole, Employee
 from app.schemas.job import (
     JobCreate, JobUpdate, JobResponse, JobDetailResponse, JobSearchParams, JobListResponse
 )
+from pydantic import BaseModel
+from typing import Optional
+
 from app.services.job_service import JobService
+from app.services.notification_service import NotificationService
 
 router = APIRouter()
 
@@ -36,6 +40,51 @@ async def create_job(
     
     job_service = JobService(db)
     job = await job_service.create_job(job_data, employee[0])
+
+    # Fire-and-forget: find top matches and create notifications (simplified)
+    try:
+        notif_service = NotificationService(db)
+        # Find recent jobseeker profiles to consider (simplified to last 100 users)
+        seekers_res = await db.execute(
+            text(
+                """
+                SELECT user_id, skills
+                FROM jobseeker_profiles
+                ORDER BY updated_at DESC NULLS LAST
+                LIMIT 100
+                """
+            )
+        )
+        seekers = seekers_res.fetchall()
+        # Compute naive skill overlap and notify top few
+        scored = []
+        for s in seekers:
+            skills = [t.strip().lower() for t in (s.skills or '').split(',') if t.strip()]
+            job_skills = [t.strip().lower() for t in (job.skills or '').split(',') if t.strip()]
+            overlap = len([t for t in job_skills if any(ts in t or t in ts for ts in skills)])
+            score = overlap / (len(job_skills) or 1)
+            if score > 0:
+                scored.append((s.user_id, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        top = scored[:10]
+        for user_id, score in top:
+            await notif_service.create_notification(
+                notification_data=
+                    # inline object to avoid importing schema; fields match create_notification usage
+                    type('Obj', (), {
+                        'recipient_id': user_id,
+                        'sender_id': current_user.id,
+                        'title': f"New Job Match: {job.title}",
+                        'message': f"We found a job that matches your skills! Match score: {round(score*100)}%",
+                        'notification_type': 'job_posted',
+                        'priority': 'high' if score > 0.8 else 'medium',
+                        'channels': ['in_app', 'email'],
+                        'metadata': { 'job_id': job.id, 'company_id': job.company_id, 'match_score': score }
+                    })
+            )
+    except Exception:
+        # Non-blocking best-effort; do not fail job creation
+        pass
     return job
 
 
@@ -200,3 +249,135 @@ async def get_company_jobs(
     job_service = JobService(db)
     jobs = await job_service.get_company_jobs(company_id, skip=skip, limit=limit)
     return jobs
+
+class JobMatchItem(BaseModel):
+    job: JobDetailResponse
+    match_score: float
+    matching_skills: list[str]
+    reasons: list[str]
+
+class JobMatchesResponse(BaseModel):
+    matches: list[JobMatchItem]
+    total: int
+    page: int
+    size: int
+    pages: int
+
+def _calc_skill_match(seeker_skills: list[str], job_skills_csv: Optional[str]):
+    if not job_skills_csv:
+        return 0.0, []
+    job_skills = [s.strip().lower() for s in job_skills_csv.split(',') if s.strip()]
+    seeker = [s.strip().lower() for s in seeker_skills]
+    matches = [s for s in job_skills if any(ss in s or s in ss for ss in seeker)]
+    return (len(matches) / len(job_skills) if job_skills else 0.0), matches
+
+def _calc_experience_match(seeker_years: Optional[int], job_min_years: Optional[int]):
+    if seeker_years is None and job_min_years is None:
+        return 0.5
+    if seeker_years is None:
+        return 0.5
+    if job_min_years is None:
+        return 0.8
+    if seeker_years >= job_min_years:
+        # better if exceeds requirement slightly
+        diff = seeker_years - job_min_years
+        return 1.0 if diff >= 0 else max(0.3, 1.0 + diff * 0.1)
+    # below requirement
+    deficit = job_min_years - seeker_years
+    return max(0.3, 1.0 - deficit * 0.15)
+
+@router.get("/matches", response_model=JobMatchesResponse)
+async def get_job_matches(
+    min_score: float = Query(0.6, ge=0.0, le=1.0),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Return ranked job matches for the current jobseeker."""
+    # Basic guard: only jobseekers for now
+    if current_user.role != UserRole.jobseeker:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only jobseekers can fetch matches")
+
+    # Fetch jobseeker profile minimal fields
+    # Using raw SQL to avoid adding new services; adapt if a profile service is available
+    seeker_res = await db.execute(
+        text(
+            """
+            SELECT skills, years_experience, preferred_job_types, location, industries, willing_to_relocate
+            FROM jobseeker_profiles
+            WHERE user_id = :uid
+            """
+        ),
+        {"uid": current_user.id},
+    )
+    seeker_row = seeker_res.fetchone()
+    seeker_skills = []
+    seeker_years = None
+    seeker_location = ""
+    seeker_pref_types: list[str] = []
+    seeker_industries: list[str] = []
+    seeker_reloc = True
+    if seeker_row:
+        seeker_skills = [s.strip() for s in (seeker_row.skills or "").split(',') if s.strip()]
+        seeker_years = seeker_row.years_experience
+        seeker_location = seeker_row.location or ""
+        seeker_pref_types = [s.strip() for s in (seeker_row.preferred_job_types or "").split(',') if s.strip()]
+        seeker_industries = [s.strip() for s in (seeker_row.industries or "").split(',') if s.strip()]
+        seeker_reloc = bool(seeker_row.willing_to_relocate) if seeker_row.willing_to_relocate is not None else True
+
+    job_service = JobService(db)
+    jobs, total = await job_service.search_jobs(
+        JobSearchParams(page=page, size=size, is_active=True)
+    )
+
+    matches: list[JobMatchItem] = []
+    for job in jobs:
+        # Convert job to detail response shape
+        detail = await job_service.get_job_with_details(job.id)
+        if not detail:
+            continue
+        # Scoring
+        reasons: list[str] = []
+        skill_score, matching_skills = _calc_skill_match(seeker_skills, job.skills)
+        if skill_score > 0.5:
+            reasons.append(f"Strong skill match ({round(skill_score*100)}%)")
+        exp_score = _calc_experience_match(seeker_years, job.min_experience)
+        if exp_score > 0.7:
+            reasons.append("Experience matches requirement")
+        # Job type preference (simple contains)
+        jt_score = 1.0 if (detail.employment_type and str(detail.employment_type) in seeker_pref_types) else (0.5 if seeker_pref_types == [] else 0.2)
+        if jt_score > 0.7:
+            reasons.append("Job type matches preference")
+        # Location (simplified)
+        loc_score = 0.2
+        if not detail.location:
+            loc_score = 0.5
+        else:
+            dl = detail.location.lower()
+            sl = (seeker_location or "").lower()
+            if sl and (sl in dl or dl in sl):
+                loc_score = 1.0
+            elif 'remote' in dl:
+                loc_score = 0.9
+            elif seeker_reloc:
+                loc_score = 0.6
+        if loc_score > 0.7:
+            reasons.append("Location is a good match")
+
+        # Salary not modeled in current schema; give neutral 0.5
+        sal_score = 0.5
+
+        total_score = min(1.0, skill_score*0.4 + exp_score*0.2 + jt_score*0.15 + loc_score*0.15 + sal_score*0.1)
+        if total_score >= min_score:
+            matches.append(JobMatchItem(
+                job=detail,
+                match_score=total_score,
+                matching_skills=matching_skills,
+                reasons=reasons,
+            ))
+
+    # Sort by score
+    matches.sort(key=lambda m: m.match_score, reverse=True)
+    pages = (total + size - 1) // size
+    return JobMatchesResponse(matches=matches, total=total, page=page, size=size, pages=pages)

@@ -7,6 +7,7 @@ class ProfileUpdateRequest(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
+    phone_country_code: Optional[str] = None
     linkedin_url: Optional[str] = None
     bio: Optional[str] = None
     location: Optional[str] = None
@@ -21,9 +22,34 @@ class ProfileUpdateRequest(BaseModel):
 
 
 class JobSeekerProfileUpdateRequest(BaseModel):
+    # Basic Info
     skills: Optional[str] = None
     years_experience: Optional[int] = None
     current_company: Optional[str] = None
+    current_job_title: Optional[str] = None
+    education: Optional[str] = None
+    certifications: Optional[str] = None
+    
+    # Job Preferences
+    preferred_job_types: Optional[str] = None
+    salary_expectation_min: Optional[int] = None
+    salary_expectation_max: Optional[int] = None
+    salary_currency: Optional[str] = None
+    notice_period: Optional[int] = None
+    availability: Optional[str] = None
+    industries: Optional[str] = None
+    willing_to_relocate: Optional[bool] = None
+    work_authorization: Optional[str] = None
+    
+    # Languages
+    languages: Optional[str] = None
+    
+    # Portfolio & Links
+    portfolio_url: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    github_url: Optional[str] = None
+    
+    # Privacy
     privacy_excluded_companies: Optional[str] = None
 
 
@@ -88,6 +114,7 @@ class EmployeeProfileResponse(BaseModel):
     bio: Optional[str] = None
     linkedin_url: Optional[str] = None
     phone: Optional[str] = None
+    phone_country_code: Optional[str] = None
     location: Optional[str] = None
     
     # Company details
@@ -122,6 +149,7 @@ class EmployeeProfileUpdateRequest(BaseModel):
     bio: Optional[str] = None
     linkedin_url: Optional[str] = None
     phone: Optional[str] = None
+    phone_country_code: Optional[str] = None
     location: Optional[str] = None
     profile_picture: Optional[str] = None
     
@@ -173,6 +201,7 @@ class ProfileResponse(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
+    phone_country_code: Optional[str] = None
     linkedin_url: Optional[str] = None
     profile_picture: Optional[str] = None
     bio: Optional[str] = None
@@ -180,6 +209,9 @@ class ProfileResponse(BaseModel):
     website: Optional[str] = None
     is_email_verified: bool
     is_active: bool
+    resume_filename: Optional[str] = None
+    resume_url: Optional[str] = None
+    resume_key: Optional[str] = None
 
 
 class JobSeekerProfileResponse(BaseModel):
@@ -187,9 +219,27 @@ class JobSeekerProfileResponse(BaseModel):
     skills: Optional[str] = None
     years_experience: Optional[int] = None
     current_company: Optional[str] = None
+    current_job_title: Optional[str] = None
+    education: Optional[str] = None
+    certifications: Optional[str] = None
+    preferred_job_types: Optional[str] = None
+    salary_expectation_min: Optional[int] = None
+    salary_expectation_max: Optional[int] = None
+    salary_currency: Optional[str] = None
+    notice_period: Optional[int] = None
+    availability: Optional[str] = None
+    industries: Optional[str] = None
+    willing_to_relocate: Optional[bool] = None
+    work_authorization: Optional[str] = None
+    languages: Optional[str] = None
+    portfolio_url: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    github_url: Optional[str] = None
     privacy_excluded_companies: Optional[str] = None
     trust_score: int
     resume_filename: Optional[str] = None
+    resume_url: Optional[str] = None
+    resume_key: Optional[str] = None
 
 
 class LegacyEmployeeProfileResponse(BaseModel):
