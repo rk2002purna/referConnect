@@ -34,7 +34,7 @@ class User(TimestampedModel, table=True):
     first_name: Optional[str] = Field(default=None, nullable=True)
     last_name: Optional[str] = Field(default=None, nullable=True)
     phone: Optional[str] = Field(default=None, nullable=True)
-    phone_country_code: Optional[str] = Field(default='+91', nullable=True)
+    phone_country_code: Optional[str] = Field(default='+91', nullable=True, sa_column_kwargs={'server_default': '+91'})
     linkedin_url: Optional[str] = Field(default=None, nullable=True)
     profile_picture: Optional[str] = Field(default=None, nullable=True)
     bio: Optional[str] = Field(default=None, nullable=True)
