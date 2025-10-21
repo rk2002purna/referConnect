@@ -52,9 +52,7 @@ export function Profile() {
   // Helper function to get API base URL
   const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_URL || 
-           process.env.NEXT_PUBLIC_API_URL || 
-           process.env.VITE_API_URL || 
-           (window.location.hostname === 'localhost' ? 'http://localhost:8000/api/v1' : 'https://referconnect-production.up.railway.app/api/v1')
+           (window.location.hostname === 'localhost' ? 'http://localhost:8000/api/v1' : 'https://referconnect.onrender.com/api/v1')
   }
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

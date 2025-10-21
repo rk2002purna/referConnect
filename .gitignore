@@ -28,7 +28,7 @@
 test-*.html
 
 # backend folder (should be separate)
-/backend
+
 
 npm-debug.log*
 yarn-debug.log*
