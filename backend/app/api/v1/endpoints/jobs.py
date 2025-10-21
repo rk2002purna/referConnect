@@ -253,17 +253,17 @@ async def get_company_jobs(
 class JobMatchItem(BaseModel):
     job: JobDetailResponse
     match_score: float
-    matching_skills: list[str]
-    reasons: list[str]
+    matching_skills: List[str]
+    reasons: List[str]
 
 class JobMatchesResponse(BaseModel):
-    matches: list[JobMatchItem]
+    matches: List[JobMatchItem]
     total: int
     page: int
     size: int
     pages: int
 
-def _calc_skill_match(seeker_skills: list[str], job_skills_csv: Optional[str]):
+def _calc_skill_match(seeker_skills: List[str], job_skills_csv: Optional[str]):
     if not job_skills_csv:
         return 0.0, []
     job_skills = [s.strip().lower() for s in job_skills_csv.split(',') if s.strip()]
@@ -315,8 +315,8 @@ async def get_job_matches(
     seeker_skills = []
     seeker_years = None
     seeker_location = ""
-    seeker_pref_types: list[str] = []
-    seeker_industries: list[str] = []
+    seeker_pref_types: List[str] = []
+    seeker_industries: List[str] = []
     seeker_reloc = True
     if seeker_row:
         seeker_skills = [s.strip() for s in (seeker_row.skills or "").split(',') if s.strip()]
@@ -331,14 +331,14 @@ async def get_job_matches(
         JobSearchParams(page=page, size=size, is_active=True)
     )
 
-    matches: list[JobMatchItem] = []
+    matches: List[JobMatchItem] = []
     for job in jobs:
         # Convert job to detail response shape
         detail = await job_service.get_job_with_details(job.id)
         if not detail:
             continue
         # Scoring
-        reasons: list[str] = []
+        reasons: List[str] = []
         skill_score, matching_skills = _calc_skill_match(seeker_skills, job.skills)
         if skill_score > 0.5:
             reasons.append(f"Strong skill match ({round(skill_score*100)}%)")
