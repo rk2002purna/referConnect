@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { JobApplicationService, JobApplication } from '../services/jobApplicationService'
@@ -43,11 +43,7 @@ export function MyApplications() {
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'applied' | 'under_review' | 'interview_scheduled' | 'interviewed' | 'accepted' | 'rejected'>('all')
 
-  useEffect(() => {
-    loadApplications()
-  }, [filter])
-
-  const loadApplications = async () => {
+  const loadApplications = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -117,7 +113,11 @@ export function MyApplications() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    loadApplications()
+  }, [loadApplications])
 
   const getStatusColor = (status: string) => {
     return JobApplicationService.getStatusColor(status)
@@ -139,9 +139,6 @@ export function MyApplications() {
     return JobApplicationService.getStatusLabel(status)
   }
 
-  const handleRefresh = () => {
-    loadApplications()
-  }
 
   const getActivityIcon = (type: string) => {
     switch (type) {

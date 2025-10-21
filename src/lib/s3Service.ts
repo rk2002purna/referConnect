@@ -1,5 +1,5 @@
 // AWS S3 Service for File Operations
-import { FileUploadResponse, FileInfo, validateFile, generateFileKey, formatFileSize } from './s3Config'
+import { FileUploadResponse, FileInfo, validateFile } from './s3Config'
 
 export class S3FileService {
   private apiBaseUrl: string

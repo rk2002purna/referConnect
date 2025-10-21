@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
+import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { notificationAPI } from '../lib/api'
@@ -10,7 +10,6 @@ import {
   Clock, 
   Archive, 
   Loader2,
-  Filter,
   Search
 } from 'lucide-react'
 
@@ -33,13 +32,7 @@ export function Notifications() {
   const [filter, setFilter] = useState<'all' | 'unread' | 'archived'>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  useEffect(() => {
-    if (user) {
-      fetchNotifications()
-    }
-  }, [user, filter])
-
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true)
       const response = await notificationAPI.getNotifications({
@@ -67,7 +60,13 @@ export function Notifications() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    if (user) {
+      fetchNotifications()
+    }
+  }, [user, fetchNotifications])
 
   const markAsRead = async (notificationId: number) => {
     try {

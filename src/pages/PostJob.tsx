@@ -40,7 +40,6 @@ const PostJob: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState(false)
   const [newSkill, setNewSkill] = useState('')
-  const [companyName, setCompanyName] = useState<string>('')
 
   const [formData, setFormData] = useState<JobFormData>({
     title: '',
@@ -71,7 +70,6 @@ const PostJob: React.FC = () => {
       const profile = profileResponse.data as ProfileResponse
       
       if (profile.company_name) {
-        setCompanyName(profile.company_name)
         setFormData(prev => ({ ...prev, company: profile.company_name || '' }))
         return
       }
@@ -81,7 +79,6 @@ const PostJob: React.FC = () => {
       if (savedCompanyData) {
         const companyData = JSON.parse(savedCompanyData)
         if (companyData.company_name) {
-          setCompanyName(companyData.company_name)
           setFormData(prev => ({ ...prev, company: companyData.company_name }))
           return
         }
