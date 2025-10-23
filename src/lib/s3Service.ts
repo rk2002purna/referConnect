@@ -1,11 +1,10 @@
 // AWS S3 Service for File Operations
 import { FileUploadResponse, FileInfo, validateFile } from './s3Config'
+import { api } from './api'
 
 export class S3FileService {
-  private apiBaseUrl: string
-
   constructor() {
-    this.apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
+    // No need to set apiBaseUrl since we're using the configured axios instance
   }
 
   /**
@@ -25,20 +24,19 @@ export class S3FileService {
     formData.append('file_type', 'resume')
 
     try {
-      const response = await fetch(`${this.apiBaseUrl}/files/upload`, {
-        method: 'POST',
+      const response = await api.post('/files/upload', formData, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: formData
+          'Content-Type': 'multipart/form-data'
+        }
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Upload failed')
+      const result = response.data as {
+        file_url: string
+        file_name: string
+        file_key: string
+        file_size: number
+        uploaded_at: string
       }
-
-      const result = await response.json()
       return {
         success: true,
         fileUrl: result.file_url,
@@ -58,17 +56,8 @@ export class S3FileService {
    */
   async getFileInfo(fileKey: string): Promise<FileInfo> {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/files/info/${encodeURIComponent(fileKey)}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to get file info')
-      }
-
-      return await response.json()
+      const response = await api.get(`/files/info/${encodeURIComponent(fileKey)}`)
+      return response.data as FileInfo
     } catch (error) {
       console.error('Get file info error:', error)
       throw error
@@ -80,17 +69,7 @@ export class S3FileService {
    */
   async deleteFile(fileKey: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/files/delete/${encodeURIComponent(fileKey)}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to delete file')
-      }
-
+      await api.delete(`/files/delete/${encodeURIComponent(fileKey)}`)
       return true
     } catch (error) {
       console.error('File deletion error:', error)
@@ -103,18 +82,8 @@ export class S3FileService {
    */
   async getDownloadUrl(fileKey: string): Promise<string> {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/files/download/${encodeURIComponent(fileKey)}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to get download URL')
-      }
-
-      const result = await response.json()
-      return result.download_url
+      const response = await api.get(`/files/download/${encodeURIComponent(fileKey)}`)
+      return (response.data as { download_url: string }).download_url
     } catch (error) {
       console.error('Get download URL error:', error)
       throw error
@@ -126,23 +95,9 @@ export class S3FileService {
    */
   async listUserFiles(userId: string, fileType?: string): Promise<FileInfo[]> {
     try {
-      let url = `${this.apiBaseUrl}/files/list/${userId}`
-      if (fileType) {
-        url += `?file_type=${fileType}`
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to list files')
-      }
-
-      const result = await response.json()
-      return result.files
+      const params = fileType ? { file_type: fileType } : {}
+      const response = await api.get(`/files/list/${userId}`, { params })
+      return (response.data as { files: FileInfo[] }).files
     } catch (error) {
       console.error('List files error:', error)
       throw error
