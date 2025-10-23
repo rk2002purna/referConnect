@@ -44,6 +44,13 @@ export function ProfileCompletionProvider({ children }: ProfileCompletionProvide
       console.log('Is onboarding complete?', completionData.is_complete)
       console.log('User role:', user?.role)
       
+      // Clear any stale localStorage flags to ensure server-side status is used
+      if (!completionData.is_complete) {
+        localStorage.removeItem('onboarding_completed')
+        localStorage.removeItem('onboarding_completed_role')
+        console.log('Cleared stale localStorage onboarding flags')
+      }
+      
       // Use server-side completion status directly - no fallback needed
       // The server now properly checks for mandatory fields (resume + experience for jobseekers)
       setCompletionStatus(completionData)

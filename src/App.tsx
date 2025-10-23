@@ -39,21 +39,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // Allow access to profile page, debug page, and post-job page even if onboarding is incomplete
   const currentPath = window.location.pathname
   
-  // Use server-side completion status with localStorage fallback
+  // Use server-side completion status only - no localStorage fallback
   console.log('ProtectedRoute - isOnboardingComplete:', isOnboardingComplete, 'currentPath:', currentPath)
-  
-  // Fallback: Check localStorage if server-side completion is false but user has basic info
-  const hasBasicInfo = user?.first_name && user?.last_name && user?.email
-  const localStorageCompleted = localStorage.getItem('onboarding_completed') === 'true'
-  const localStorageRole = localStorage.getItem('onboarding_completed_role')
-  
-  const shouldSkipOnboarding = isOnboardingComplete || 
-    (hasBasicInfo && localStorageCompleted && localStorageRole === user?.role)
   
   // Always redirect to onboarding if not complete, except for specific allowed pages
   const allowedPaths = ['/profile', '/onboarding', '/debug']
-  if (!shouldSkipOnboarding && !allowedPaths.includes(currentPath)) {
-    console.log('Redirecting to onboarding - completion status:', isOnboardingComplete, 'hasBasicInfo:', hasBasicInfo)
+  if (!isOnboardingComplete && !allowedPaths.includes(currentPath)) {
+    console.log('Redirecting to onboarding - completion status:', isOnboardingComplete)
     return <Navigate to="/onboarding" replace />
   }
 
@@ -74,18 +66,10 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (user) {
-    // Use server-side completion status with localStorage fallback
+    // Use server-side completion status only - no localStorage fallback
     console.log('PublicRoute - isOnboardingComplete:', isOnboardingComplete, 'user role:', user.role)
     
-    // Fallback: Check localStorage if server-side completion is false but user has basic info
-    const hasBasicInfo = user.first_name && user.last_name && user.email
-    const localStorageCompleted = localStorage.getItem('onboarding_completed') === 'true'
-    const localStorageRole = localStorage.getItem('onboarding_completed_role')
-    
-    const shouldSkipOnboarding = isOnboardingComplete || 
-      (hasBasicInfo && localStorageCompleted && localStorageRole === user.role)
-    
-    if (shouldSkipOnboarding) {
+    if (isOnboardingComplete) {
       // Redirect based on user role
       const redirectPath = user.role === 'jobseeker' ? '/search' : '/post-job'
       console.log('Redirecting to:', redirectPath)

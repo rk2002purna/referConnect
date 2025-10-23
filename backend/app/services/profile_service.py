@@ -382,19 +382,30 @@ class ProfileService:
             
             if jobseeker:
                 # Check mandatory jobseeker fields: resume and years_experience
-                jobseeker_mandatory = ['years_experience', 'resume_filename']
-                jobseeker_optional = ['skills', 'current_company', 'education', 'certifications']
+                # Check resume in both jobseeker table and user table
+                jobseeker_resume = jobseeker.resume_filename is not None and jobseeker.resume_filename != ''
+                user_resume = user.resume_filename is not None and user.resume_filename != ''
+                has_resume = jobseeker_resume or user_resume
+                has_experience = jobseeker.years_experience is not None and jobseeker.years_experience != ''
                 
-                mandatory_completed = sum(1 for field in jobseeker_mandatory if getattr(jobseeker, field) is not None and getattr(jobseeker, field) != '')
+                # Count mandatory fields completed
+                mandatory_completed = 0
+                if has_experience:
+                    mandatory_completed += 1
+                if has_resume:
+                    mandatory_completed += 1
+                
+                # Check optional fields
+                jobseeker_optional = ['skills', 'current_company', 'education', 'certifications']
                 optional_completed = sum(1 for field in jobseeker_optional if getattr(jobseeker, field) is not None and getattr(jobseeker, field) != '')
                 
                 # Calculate completion: 80% for mandatory fields, 20% for optional
-                jobseeker_completion = min(100, int((mandatory_completed / len(jobseeker_mandatory)) * 80 + (optional_completed / len(jobseeker_optional)) * 20))
+                jobseeker_completion = min(100, int((mandatory_completed / 2) * 80 + (optional_completed / len(jobseeker_optional)) * 20))
                 
                 # Check missing mandatory jobseeker fields
-                if not jobseeker.years_experience:
+                if not has_experience:
                     missing_fields.append("Years of Experience")
-                if not jobseeker.resume_filename:
+                if not has_resume:
                     missing_fields.append("Resume")
             else:
                 missing_fields.append("Jobseeker Profile")
@@ -424,35 +435,13 @@ class ProfileService:
                         missing_fields.append("Company Email Verification")
                         employee_completion = 50
                 except Exception:
-                    # Verification tables don't exist or other error - check if user has company email domain
-                    if user.email and '@' in user.email:
-                        domain = user.email.split('@')[1]
-                        # Check if there's a company with this domain using raw SQL to avoid transaction issues
-                        try:
-                            company_result = self.db.execute(
-                                text("SELECT id FROM companies WHERE domain = :domain"),
-                                {"domain": domain}
-                            )
-                            company = company_result.fetchone()
-                            
-                            if company:
-                                # User has company email domain - consider verified
-                                employee_completion = 100
-                            else:
-                                # No company domain match - needs verification
-                                missing_fields.append("Company Email Verification")
-                                employee_completion = 50
-                        except Exception:
-                            # Fallback - assume needs verification
-                            missing_fields.append("Company Email Verification")
-                            employee_completion = 50
-                    else:
-                        # No email or invalid email
-                        missing_fields.append("Company Email Verification")
-                        employee_completion = 50
-            else:
-                missing_fields.append("Employee Profile")
-                employee_completion = 0
+                    # Verification tables don't exist or other error - require verification
+                    # Don't auto-verify based on email domain - require actual verification process
+                    missing_fields.append("Company Email Verification")
+                    employee_completion = 50
+        else:
+            missing_fields.append("Employee Profile")
+            employee_completion = 0
         
         # Calculate overall completion
         if user.role.value == 'jobseeker':
@@ -476,21 +465,9 @@ class ProfileService:
                 verification = verification_result.first()
                 is_verified = verification and verification.status == VerificationStatus.verified
             except Exception:
-                # Verification tables don't exist or other error - check if user has company email domain
-                if user.email and '@' in user.email:
-                    domain = user.email.split('@')[1]
-                    # Check if there's a company with this domain using raw SQL to avoid transaction issues
-                    try:
-                        company_result = self.db.execute(
-                            text("SELECT id FROM companies WHERE domain = :domain"),
-                            {"domain": domain}
-                        )
-                        company = company_result.fetchone()
-                        is_verified = company is not None
-                    except Exception:
-                        is_verified = False
-                else:
-                    is_verified = False
+                # Verification tables don't exist or other error - require verification
+                # Don't auto-verify based on email domain - require actual verification process
+                is_verified = False
             
             is_complete = (basic_required_completed == len(basic_required) and employee_exists and is_verified)
         else:
@@ -499,7 +476,10 @@ class ProfileService:
             jobseeker = jobseeker_result.scalar_one_or_none()
             
             if jobseeker:
-                has_resume = jobseeker.resume_filename is not None and jobseeker.resume_filename != ''
+                # Check resume in both jobseeker table and user table
+                jobseeker_resume = jobseeker.resume_filename is not None and jobseeker.resume_filename != ''
+                user_resume = user.resume_filename is not None and user.resume_filename != ''
+                has_resume = jobseeker_resume or user_resume
                 has_experience = jobseeker.years_experience is not None and jobseeker.years_experience != ''
                 is_complete = (basic_required_completed == len(basic_required) and has_resume and has_experience)
             else:
