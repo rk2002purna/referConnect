@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useProfileCompletion } from '../contexts/ProfileCompletionContext'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card'
@@ -20,7 +21,8 @@ export function Register() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   
-  const { register } = useAuth()
+  const { register, user } = useAuth()
+  const { isOnboardingComplete } = useProfileCompletion()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -68,8 +70,19 @@ export function Register() {
       
       // Clear any stale onboarding completion data
       // Note: We don't clear onboarding_completed flags anymore since we use server-side completion status
-      console.log('Registration successful, navigating to login')
-      navigate('/login')
+      console.log('Registration successful, user is now logged in')
+      
+      // User is now logged in, redirect based on onboarding completion
+      if (isOnboardingComplete) {
+        // Redirect based on user role
+        const redirectPath = user?.role === 'jobseeker' ? '/search' : '/post-job'
+        console.log('Onboarding complete, redirecting to:', redirectPath)
+        navigate(redirectPath)
+      } else {
+        // Redirect to onboarding if not complete
+        console.log('Onboarding not complete, redirecting to onboarding')
+        navigate('/onboarding')
+      }
     } catch (err: any) {
       // Safely extract error message
       let errorMessage = 'Registration failed. Please try again.'

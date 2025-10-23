@@ -107,8 +107,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const register = async (data: RegisterData) => {
     try {
       await authAPI.register(data)
-      // Don't auto-login after registration - let user login manually
-      // This ensures proper onboarding flow
+      // Auto-login after registration to keep user logged in
+      await login(data.email, data.password)
     } catch (error: any) {
       console.error('Registration failed:', error)
       // Handle different error types safely

@@ -1,13 +1,13 @@
 from typing import Optional, Dict, Any, List
 from sqlmodel import Session
-from sqlalchemy import select, update
+from sqlalchemy import select, update, text
 from sqlalchemy.orm import selectinload
 import os
 import uuid
 from pathlib import Path
 from datetime import datetime
 
-from app.models.user import User, JobSeeker, Employee
+from app.models.user import User, JobSeeker, Employee, Company
 from app.schemas.profile import (
     ProfileUpdateRequest, JobSeekerProfileUpdateRequest, EmployeeProfileUpdateRequest,
     ProfileResponse, JobSeekerProfileResponse, EmployeeProfileResponse, ProfileCompletionResponse,
@@ -401,15 +401,55 @@ class ProfileService:
                 jobseeker_completion = 0
                 
         elif user.role.value == 'employee':
-            # For employees, check if they have an employee profile
+            # For employees, check if they have an employee profile and are verified
             result = self.db.exec(
                 select(Employee).where(Employee.user_id == user_id)
             )
             employee = result.scalar_one_or_none()
             
             if employee:
-                # Employees are considered complete if they have basic info + employee profile exists
-                employee_completion = 100
+                # Check verification status - handle case where verification tables don't exist
+                try:
+                    from app.models.verification import EmployeeVerification, VerificationStatus
+                    verification_result = self.db.exec(
+                        select(EmployeeVerification).where(EmployeeVerification.user_id == user_id)
+                    )
+                    verification = verification_result.first()
+                    
+                    if verification and verification.status == VerificationStatus.verified:
+                        # Employee is verified - consider complete
+                        employee_completion = 100
+                    else:
+                        # Employee profile exists but not verified
+                        missing_fields.append("Company Email Verification")
+                        employee_completion = 50
+                except Exception:
+                    # Verification tables don't exist or other error - check if user has company email domain
+                    if user.email and '@' in user.email:
+                        domain = user.email.split('@')[1]
+                        # Check if there's a company with this domain using raw SQL to avoid transaction issues
+                        try:
+                            company_result = self.db.execute(
+                                text("SELECT id FROM companies WHERE domain = :domain"),
+                                {"domain": domain}
+                            )
+                            company = company_result.fetchone()
+                            
+                            if company:
+                                # User has company email domain - consider verified
+                                employee_completion = 100
+                            else:
+                                # No company domain match - needs verification
+                                missing_fields.append("Company Email Verification")
+                                employee_completion = 50
+                        except Exception:
+                            # Fallback - assume needs verification
+                            missing_fields.append("Company Email Verification")
+                            employee_completion = 50
+                    else:
+                        # No email or invalid email
+                        missing_fields.append("Company Email Verification")
+                        employee_completion = 50
             else:
                 missing_fields.append("Employee Profile")
                 employee_completion = 0
@@ -421,11 +461,38 @@ class ProfileService:
             overall_completion = (basic_completion + employee_completion) // 2
         
         # Determine if onboarding is complete
-        # For employees: complete if they have basic required fields + employee profile
+        # For employees: complete if they have basic required fields + employee profile + verification
         # For jobseekers: complete if they have basic required fields + mandatory jobseeker fields (resume + experience)
         if user.role.value == 'employee':
-            is_complete = (basic_required_completed == len(basic_required) and 
-                          self.db.exec(select(Employee).where(Employee.user_id == user_id)).scalar_one_or_none() is not None)
+            employee_exists = self.db.exec(select(Employee).where(Employee.user_id == user_id)).scalar_one_or_none() is not None
+            
+            # Check verification status - handle case where verification tables don't exist
+            is_verified = False
+            try:
+                from app.models.verification import EmployeeVerification, VerificationStatus
+                verification_result = self.db.exec(
+                    select(EmployeeVerification).where(EmployeeVerification.user_id == user_id)
+                )
+                verification = verification_result.first()
+                is_verified = verification and verification.status == VerificationStatus.verified
+            except Exception:
+                # Verification tables don't exist or other error - check if user has company email domain
+                if user.email and '@' in user.email:
+                    domain = user.email.split('@')[1]
+                    # Check if there's a company with this domain using raw SQL to avoid transaction issues
+                    try:
+                        company_result = self.db.execute(
+                            text("SELECT id FROM companies WHERE domain = :domain"),
+                            {"domain": domain}
+                        )
+                        company = company_result.fetchone()
+                        is_verified = company is not None
+                    except Exception:
+                        is_verified = False
+                else:
+                    is_verified = False
+            
+            is_complete = (basic_required_completed == len(basic_required) and employee_exists and is_verified)
         else:
             # For jobseekers, check if they have mandatory fields: resume and years_experience
             jobseeker_result = self.db.exec(select(JobSeeker).where(JobSeeker.user_id == user_id))
