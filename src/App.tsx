@@ -50,8 +50,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const shouldSkipOnboarding = isOnboardingComplete || 
     (hasBasicInfo && localStorageCompleted && localStorageRole === user?.role)
   
-  if (!shouldSkipOnboarding && currentPath !== '/profile' && currentPath !== '/onboarding' && currentPath !== '/debug' && currentPath !== '/post-job') {
-    console.log('Redirecting to onboarding because completion is false')
+  // Always redirect to onboarding if not complete, except for specific allowed pages
+  const allowedPaths = ['/profile', '/onboarding', '/debug']
+  if (!shouldSkipOnboarding && !allowedPaths.includes(currentPath)) {
+    console.log('Redirecting to onboarding - completion status:', isOnboardingComplete, 'hasBasicInfo:', hasBasicInfo)
     return <Navigate to="/onboarding" replace />
   }
 

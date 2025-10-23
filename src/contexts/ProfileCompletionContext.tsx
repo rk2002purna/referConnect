@@ -44,44 +44,22 @@ export function ProfileCompletionProvider({ children }: ProfileCompletionProvide
       console.log('Is onboarding complete?', completionData.is_complete)
       console.log('User role:', user?.role)
       
-      // Fallback: If server says incomplete but user has basic required fields, consider complete
-      const hasBasicInfo = user.first_name && user.last_name && user.email
-      if (!completionData.is_complete && hasBasicInfo) {
-        console.log('Server says incomplete but user has basic info, using fallback logic')
-        const fallbackData = {
-          ...completionData,
-          is_complete: true,
-          overall_completion: Math.max(completionData.overall_completion, 80)
-        }
-        setCompletionStatus(fallbackData)
-      } else {
-        setCompletionStatus(completionData)
-      }
+      // Use server-side completion status directly - no fallback needed
+      // The server now properly checks for mandatory fields (resume + experience for jobseekers)
+      setCompletionStatus(completionData)
     } catch (error) {
       console.error('Failed to fetch profile completion status:', error)
       
-      // Fallback: If API fails but user has basic info, consider them complete
-      const hasBasicInfo = user.first_name && user.last_name && user.email
-      if (hasBasicInfo) {
-        console.log('API failed but user has basic info, using fallback completion')
-        setCompletionStatus({
-          basic_info_completion: 100,
-          jobseeker_completion: user.role === 'jobseeker' ? 50 : 0,
-          employee_completion: user.role === 'employee' ? 100 : 0,
-          overall_completion: 80,
-          missing_fields: [],
-          is_complete: true
-        })
-      } else {
-        setCompletionStatus({
-          basic_info_completion: 0,
-          jobseeker_completion: 0,
-          employee_completion: 0,
-          overall_completion: 0,
-          missing_fields: ['profile_data'],
-          is_complete: false
-        })
-      }
+      // Fallback: If API fails, assume incomplete to be safe
+      console.log('API failed, assuming incomplete onboarding')
+      setCompletionStatus({
+        basic_info_completion: 0,
+        jobseeker_completion: 0,
+        employee_completion: 0,
+        overall_completion: 0,
+        missing_fields: ['profile_data'],
+        is_complete: false
+      })
     } finally {
       setLoading(false)
     }

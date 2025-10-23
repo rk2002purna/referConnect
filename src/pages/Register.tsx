@@ -68,8 +68,8 @@ export function Register() {
       
       // Clear any stale onboarding completion data
       // Note: We don't clear onboarding_completed flags anymore since we use server-side completion status
-      console.log('Registration successful, navigating to onboarding')
-      navigate('/onboarding')
+      console.log('Registration successful, navigating to login')
+      navigate('/login')
     } catch (err: any) {
       // Safely extract error message
       let errorMessage = 'Registration failed. Please try again.'

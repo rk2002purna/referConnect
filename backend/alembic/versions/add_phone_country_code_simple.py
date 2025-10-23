@@ -23,3 +23,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Remove phone_country_code column from users table
     op.drop_column('users', 'phone_country_code')
+
+

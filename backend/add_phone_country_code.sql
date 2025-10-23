@@ -19,3 +19,5 @@ BEGIN
         RAISE NOTICE 'phone_country_code column already exists';
     END IF;
 END $$;
+
+

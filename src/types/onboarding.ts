@@ -153,7 +153,6 @@ export const JOB_SEEKER_STEPS: OnboardingStep[] = [
     isRequired: true,
     validation: (data) => {
       const errors: string[] = []
-      if (!data.jobseeker?.skills?.length) errors.push('At least one skill is required')
       if (!data.jobseeker?.years_experience) errors.push('Years of experience is required')
       return errors
     }

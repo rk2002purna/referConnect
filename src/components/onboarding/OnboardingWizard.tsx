@@ -52,14 +52,21 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   // Get steps based on role and verification method
   const getSteps = () => {
     if (user?.role === 'jobseeker') {
-      // Add ResumeUploadStep to the jobseeker steps
+      // Add ResumeUploadStep to the jobseeker steps as mandatory
       const jobseekerSteps = [...JOB_SEEKER_STEPS]
       jobseekerSteps.push({
         id: 'resume-upload',
-        title: 'Resume & Portfolio',
-        description: 'Upload your resume and portfolio links',
+        title: 'Resume Upload',
+        description: 'Upload your resume (required)',
         component: ResumeUploadStep,
-        isRequired: false
+        isRequired: true,
+        validation: (data) => {
+          const errors: string[] = []
+          if (!data.jobseeker?.resume_filename) {
+            errors.push('Resume upload is required')
+          }
+          return errors
+        }
       })
       return jobseekerSteps
     }

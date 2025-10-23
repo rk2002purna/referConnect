@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useProfileCompletion } from '../contexts/ProfileCompletionContext'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card'
@@ -13,7 +14,8 @@ export function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   
-  const { login } = useAuth()
+  const { login, user } = useAuth()
+  const { isOnboardingComplete } = useProfileCompletion()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,7 +29,15 @@ export function Login() {
       // Clear any stale onboarding completion data to ensure fresh start
       // Note: We don't clear onboarding_completed flags anymore since we use server-side completion status
       
-      navigate('/dashboard')
+      // Check if onboarding is complete and redirect accordingly
+      if (isOnboardingComplete) {
+        // Redirect based on user role
+        const redirectPath = user?.role === 'jobseeker' ? '/search' : '/post-job'
+        navigate(redirectPath)
+      } else {
+        // Redirect to onboarding if not complete
+        navigate('/onboarding')
+      }
     } catch (err: any) {
       // Safely extract error message
       let errorMessage = 'Login failed. Please try again.'

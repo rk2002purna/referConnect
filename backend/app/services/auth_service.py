@@ -65,14 +65,20 @@ class AuthService:
         self.db.commit()
         self.db.refresh(user)
 
-        # Create role-specific profile only for employees
+        # Create role-specific profile for both employees and jobseekers
         if user_data.role == UserRole.employee:
             employee = Employee(
                 user_id=user.id,
                 company_id=company.id
             )
             self.db.add(employee)
-        # JobSeeker profile will be created when user first accesses profile features
+        elif user_data.role == UserRole.jobseeker:
+            # Create a basic jobseeker profile for onboarding completion
+            jobseeker = JobSeeker(
+                user_id=user.id,
+                trust_score=0  # Will be updated during onboarding
+            )
+            self.db.add(jobseeker)
 
         self.db.commit()
         return user
