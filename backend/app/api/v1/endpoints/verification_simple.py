@@ -94,6 +94,8 @@ async def get_verified_companies(query: Optional[str] = None, db: Session = Depe
                 "industry": row[3],
                 "size": row[4],
                 "verified": True,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
             }
             for row in rows
         ]
