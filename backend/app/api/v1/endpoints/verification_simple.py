@@ -18,16 +18,24 @@ from app.services.email_service import email_service
 from sqlmodel import Session
 from sqlalchemy import text
 from app.db.session import get_db_session
-from app.services.verification_service import VerificationService
 from app.schemas.verification import CompanySearchResponse
+from sqlmodel import SQLModel, Field, select
 
 router = APIRouter()
 
 
 """
 Note: Using app.schemas.verification.CompanySearchResponse for response_model.
-It is configured with from_attributes=True, so SQLModel instances serialize correctly.
 """
+
+
+class Company(SQLModel, table=True):
+    __tablename__ = "companies"
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    domain: str
+    industry: str | None = None
+    size: str | None = None
 
 
 # OTP Verification Schemas
@@ -60,39 +68,28 @@ async def get_verified_companies(query: Optional[str] = None, db: Session = Depe
     We add `verified=True` in the response for compatibility with the schema.
     """
     try:
-        conditions = []
-        params: dict[str, str] = {}
-        if query:
-            params["q"] = f"%{query.lower()}%"
-            # Only search on columns we know exist everywhere
-            conditions.append("(LOWER(name) LIKE :q OR LOWER(domain) LIKE :q)")
+        if query and query.strip():
+            like = f"%{query}%"
+            stmt = (
+                select(Company)
+                .where((Company.name.ilike(like)) | (Company.domain.ilike(like)))
+                .order_by(Company.name)
+            )
+        else:
+            stmt = select(Company).order_by(Company.name).limit(100)
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        # Select guaranteed columns and synthesize optional ones to avoid schema mismatches
-        sql = text(
-            f"""
-            SELECT id, name, domain,
-                   NULL::text AS industry,
-                   NULL::text AS size
-            FROM companies
-            {where_clause}
-            ORDER BY name
-            """
-        )
-
-        result = db.execute(sql, params)
-        rows = result.fetchall()
+        rows = db.exec(stmt).all()
 
         companies = [
             {
-                "id": row[0],
-                "name": row[1],
-                "domain": row[2],
-                "industry": row[3],
-                "size": row[4],
+                "id": c.id,
+                "name": c.name,
+                "domain": c.domain,
+                "industry": c.industry,
+                "size": c.size,
                 "verified": True,
             }
-            for row in rows
+            for c in rows
         ]
 
         return CompanySearchResponse(companies=companies)
@@ -102,7 +99,8 @@ async def get_verified_companies(query: Optional[str] = None, db: Session = Depe
             db.rollback()
         except Exception:
             pass
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to load companies: {e}")
+        # Surface exact error for diagnosis
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to load companies: {type(e).__name__}: {e}")
 
 
 
