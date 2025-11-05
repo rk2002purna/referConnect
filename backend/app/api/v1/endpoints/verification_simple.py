@@ -199,8 +199,12 @@ async def verify_otp(request: VerifyOTPRequest, db: Session = Depends(get_db_ses
                 message="Invalid or expired OTP code"
             )
         
-        otp_id, expires_at_str = result
-        expires_at = datetime.fromisoformat(expires_at_str)
+        otp_id, expires_at_val = result
+        # expires_at may already be a datetime from the DB driver; handle both cases
+        if isinstance(expires_at_val, str):
+            expires_at = datetime.fromisoformat(expires_at_val)
+        else:
+            expires_at = expires_at_val
         
         # Check if OTP is expired
         if datetime.utcnow() > expires_at:
