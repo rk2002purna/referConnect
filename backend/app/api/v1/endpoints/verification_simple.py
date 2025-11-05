@@ -64,12 +64,16 @@ async def get_verified_companies(query: Optional[str] = None, db: Session = Depe
         params: dict[str, str] = {}
         if query:
             params["q"] = f"%{query.lower()}%"
-            conditions.append("(LOWER(name) LIKE :q OR LOWER(domain) LIKE :q OR LOWER(industry) LIKE :q)")
+            # Only search on columns we know exist everywhere
+            conditions.append("(LOWER(name) LIKE :q OR LOWER(domain) LIKE :q)")
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        # Select guaranteed columns and synthesize optional ones to avoid schema mismatches
         sql = text(
             f"""
-            SELECT id, name, domain, industry, size
+            SELECT id, name, domain,
+                   NULL::text AS industry,
+                   NULL::text AS size
             FROM companies
             {where_clause}
             ORDER BY name
@@ -86,13 +90,18 @@ async def get_verified_companies(query: Optional[str] = None, db: Session = Depe
                 "domain": row[2],
                 "industry": row[3],
                 "size": row[4],
-                "verified": True,  # Mark as verified for compatibility
+                "verified": True,
             }
             for row in rows
         ]
 
         return CompanySearchResponse(companies=companies)
     except Exception as e:
+        # Ensure the session is usable for subsequent requests
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to load companies: {e}")
 
 
