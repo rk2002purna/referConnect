@@ -31,11 +31,11 @@ Note: Using app.schemas.verification.CompanySearchResponse for response_model.
 
 class Company(SQLModel, table=True):
     __tablename__ = "companies"
-    id: int | None = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     domain: str
-    industry: str | None = None
-    size: str | None = None
+    industry: Optional[str] = None
+    size: Optional[str] = None
 
 
 # OTP Verification Schemas
