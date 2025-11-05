@@ -147,11 +147,11 @@ async def send_otp(request: SendOTPRequest):
         conn.commit()
         conn.close()
         
-        # Get company name for email
+        # Get company name for email (use companies table to match prod schema)
         company_name = "Unknown Company"
         conn_company = sqlite3.connect("referconnect.db")
         cursor_company = conn_company.cursor()
-        cursor_company.execute("SELECT name FROM verified_companies WHERE id = ?", (request.company_id,))
+        cursor_company.execute("SELECT name FROM companies WHERE id = ?", (request.company_id,))
         company_row = cursor_company.fetchone()
         if company_row:
             company_name = company_row[0]
