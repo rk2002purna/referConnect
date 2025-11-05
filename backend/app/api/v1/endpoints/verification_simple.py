@@ -15,21 +15,19 @@ sys.path.append('/Users/pradeepdyd/referconnect-backend')
 
 # Import email service
 from app.services.email_service import email_service
+from sqlmodel import Session
+from sqlalchemy import text
+from app.db.session import get_db_session
+from app.services.verification_service import VerificationService
+from app.schemas.verification import CompanySearchResponse
 
 router = APIRouter()
 
 
-class VerifiedCompany(BaseModel):
-    id: int
-    name: str
-    domain: str
-    industry: Optional[str] = None
-    size: Optional[str] = None
-    verified: bool = True
-
-
-class CompanySearchResponse(BaseModel):
-    companies: List[VerifiedCompany]
+"""
+Note: Using app.schemas.verification.CompanySearchResponse for response_model.
+It is configured with from_attributes=True, so SQLModel instances serialize correctly.
+"""
 
 
 # OTP Verification Schemas
@@ -55,59 +53,47 @@ class VerifyOTPResponse(BaseModel):
 
 
 @router.get("/companies", response_model=CompanySearchResponse)
-async def get_verified_companies(query: Optional[str] = None):
-    """Get list of verified companies with optional search"""
+async def get_verified_companies(query: Optional[str] = None, db: Session = Depends(get_db_session)):
+    """Get list of companies with optional search using the production `companies` table.
+
+    Expected columns in `companies` table: id, name, domain, industry, size.
+    We add `verified=True` in the response for compatibility with the schema.
+    """
     try:
-        # Connect to SQLite database
-        conn = sqlite3.connect("referconnect.db")
-        cursor = conn.cursor()
-        
-        # Build query - use verified_companies table
+        conditions = []
+        params: dict[str, str] = {}
         if query:
-            search_term = f"%{query.lower()}%"
-            cursor.execute("""
-                SELECT id, name, domain, industry, size, verified 
-                FROM verified_companies 
-                WHERE verified = 1 AND (LOWER(name) LIKE ? OR LOWER(domain) LIKE ? OR LOWER(industry) LIKE ?)
-                ORDER BY name
-            """, (search_term, search_term, search_term))
-        else:
-            cursor.execute("""
-                SELECT id, name, domain, industry, size, verified 
-                FROM verified_companies 
-                WHERE verified = 1
-                ORDER BY name
-            """)
-        
-        rows = cursor.fetchall()
+            params["q"] = f"%{query.lower()}%"
+            conditions.append("(LOWER(name) LIKE :q OR LOWER(domain) LIKE :q OR LOWER(industry) LIKE :q)")
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        sql = text(
+            f"""
+            SELECT id, name, domain, industry, size
+            FROM companies
+            {where_clause}
+            ORDER BY name
+            """
+        )
+
+        conn = db.get_bind()
+        rows = conn.execute(sql, params).fetchall()
+
         companies = [
-            VerifiedCompany(
-                id=row[0],
-                name=row[1],
-                domain=row[2],
-                industry=row[3],
-                size=row[4],
-                verified=bool(row[5])
-            )
+            {
+                "id": row[0],
+                "name": row[1],
+                "domain": row[2],
+                "industry": row[3],
+                "size": row[4],
+                "verified": True,  # Mark as verified for compatibility
+            }
             for row in rows
         ]
-        
-        conn.close()
+
         return CompanySearchResponse(companies=companies)
-        
     except Exception as e:
-        print(f"Database error: {e}")
-        # Return fallback data
-        fallback_companies = [
-            VerifiedCompany(id=1, name="Google", domain="google.com", industry="Technology", size="10,000+", verified=True),
-            VerifiedCompany(id=2, name="Microsoft", domain="microsoft.com", industry="Technology", size="10,000+", verified=True),
-            VerifiedCompany(id=3, name="Apple", domain="apple.com", industry="Technology", size="10,000+", verified=True),
-            VerifiedCompany(id=4, name="Amazon", domain="amazon.com", industry="E-commerce", size="10,000+", verified=True),
-            VerifiedCompany(id=5, name="Meta", domain="meta.com", industry="Technology", size="10,000+", verified=True),
-            VerifiedCompany(id=11, name="Wipro", domain="wipro.com", industry="IT Services", size="10,000+", verified=True),
-            VerifiedCompany(id=7, name="FanLVR", domain="fanlvr.com", industry="Entertainment", size="100+", verified=True),
-        ]
-        return CompanySearchResponse(companies=fallback_companies)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to load companies: {e}")
 
 
 
