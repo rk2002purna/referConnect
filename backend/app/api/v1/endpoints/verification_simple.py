@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import secrets
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, EmailStr, Field
@@ -118,7 +118,7 @@ async def send_otp(request: SendOTPRequest, db: Session = Depends(get_db_session
     try:
         # Generate 6-digit OTP
         otp_code = ''.join(secrets.choice(string.digits) for _ in range(6))
-        expires_at = datetime.utcnow() + timedelta(minutes=10)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
         
         # Ensure OTP table exists in Postgres and insert OTP
         db.execute(text("""
@@ -200,15 +200,18 @@ async def verify_otp(request: VerifyOTPRequest, db: Session = Depends(get_db_ses
             )
         
         otp_id, expires_at_val = result
-        # expires_at may already be a datetime from the DB driver; handle both cases
+        # Normalize expires_at to timezone-aware UTC
         if isinstance(expires_at_val, str):
-            expires_at = datetime.fromisoformat(expires_at_val)
+            parsed = datetime.fromisoformat(expires_at_val)
         else:
-            expires_at = expires_at_val
+            parsed = expires_at_val
+        if parsed.tzinfo is None:
+            expires_at = parsed.replace(tzinfo=timezone.utc)
+        else:
+            expires_at = parsed.astimezone(timezone.utc)
         
         # Check if OTP is expired
-        if datetime.utcnow() > expires_at:
-            conn.close()
+        if datetime.now(timezone.utc) > expires_at:
             return VerifyOTPResponse(
                 success=False,
                 message="OTP code has expired"
