@@ -76,8 +76,8 @@ async def get_verified_companies(query: Optional[str] = None, db: Session = Depe
             """
         )
 
-        conn = db.get_bind()
-        rows = conn.execute(sql, params).fetchall()
+        result = db.execute(sql, params)
+        rows = result.fetchall()
 
         companies = [
             {
