@@ -19,7 +19,6 @@ from sqlmodel import Session
 from sqlalchemy import text
 from app.db.session import get_db_session
 from app.schemas.verification import CompanySearchResponse
-from sqlmodel import SQLModel, Field, select
 
 router = APIRouter()
 
@@ -27,15 +26,6 @@ router = APIRouter()
 """
 Note: Using app.schemas.verification.CompanySearchResponse for response_model.
 """
-
-
-class Company(SQLModel, table=True):
-    __tablename__ = "companies"
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    domain: str
-    industry: Optional[str] = None
-    size: Optional[str] = None
 
 
 # OTP Verification Schemas
@@ -68,28 +58,44 @@ async def get_verified_companies(query: Optional[str] = None, db: Session = Depe
     We add `verified=True` in the response for compatibility with the schema.
     """
     try:
+        params: dict[str, str] = {}
         if query and query.strip():
-            like = f"%{query}%"
-            stmt = (
-                select(Company)
-                .where((Company.name.ilike(like)) | (Company.domain.ilike(like)))
-                .order_by(Company.name)
+            params["q"] = f"%{query.lower()}%"
+            sql = text(
+                """
+                SELECT id, name, domain,
+                       NULL::text AS industry,
+                       NULL::text AS size
+                FROM companies
+                WHERE (LOWER(name) LIKE :q OR LOWER(domain) LIKE :q)
+                ORDER BY name
+                """
             )
         else:
-            stmt = select(Company).order_by(Company.name).limit(100)
+            sql = text(
+                """
+                SELECT id, name, domain,
+                       NULL::text AS industry,
+                       NULL::text AS size
+                FROM companies
+                ORDER BY name
+                LIMIT 100
+                """
+            )
 
-        rows = db.exec(stmt).all()
+        result = db.execute(sql, params if query and query.strip() else {})
+        rows = result.fetchall()
 
         companies = [
             {
-                "id": c.id,
-                "name": c.name,
-                "domain": c.domain,
-                "industry": c.industry,
-                "size": c.size,
+                "id": row[0],
+                "name": row[1],
+                "domain": row[2],
+                "industry": row[3],
+                "size": row[4],
                 "verified": True,
             }
-            for c in rows
+            for row in rows
         ]
 
         return CompanySearchResponse(companies=companies)
