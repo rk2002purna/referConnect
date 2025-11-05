@@ -113,49 +113,46 @@ async def get_verified_companies(query: Optional[str] = None, db: Session = Depe
 
 
 @router.post("/send-otp", response_model=SendOTPResponse)
-async def send_otp(request: SendOTPRequest):
+async def send_otp(request: SendOTPRequest, db: Session = Depends(get_db_session)):
     """Send OTP to company email for verification"""
     try:
         # Generate 6-digit OTP
         otp_code = ''.join(secrets.choice(string.digits) for _ in range(6))
         expires_at = datetime.utcnow() + timedelta(minutes=10)
         
-        # Store OTP in database (simplified - in production, use proper OTP table)
-        conn = sqlite3.connect("referconnect.db")
-        cursor = conn.cursor()
-        
-        # Create OTP table if it doesn't exist
-        cursor.execute("""
+        # Ensure OTP table exists in Postgres and insert OTP
+        db.execute(text("""
             CREATE TABLE IF NOT EXISTS otp_verifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 user_id INTEGER,
                 company_id INTEGER,
                 company_email TEXT,
                 otp_code TEXT,
-                expires_at TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
                 verified BOOLEAN DEFAULT FALSE
             )
-        """)
-        
-        # Insert OTP record (using 0 as default user_id for now)
-        cursor.execute("""
-            INSERT INTO otp_verifications (user_id, company_id, company_email, otp_code, expires_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (0, request.company_id, request.company_email, otp_code, expires_at.isoformat()))
-        
-        conn.commit()
-        conn.close()
+        """))
+        db.execute(
+            text("""
+                INSERT INTO otp_verifications (user_id, company_id, company_email, otp_code, expires_at)
+                VALUES (:user_id, :company_id, :company_email, :otp_code, :expires_at)
+            """),
+            {
+                "user_id": 0,
+                "company_id": request.company_id,
+                "company_email": request.company_email,
+                "otp_code": otp_code,
+                "expires_at": expires_at,
+            }
+        )
+        db.commit()
         
         # Get company name for email (use companies table to match prod schema)
         company_name = "Unknown Company"
-        conn_company = sqlite3.connect("referconnect.db")
-        cursor_company = conn_company.cursor()
-        cursor_company.execute("SELECT name FROM companies WHERE id = ?", (request.company_id,))
-        company_row = cursor_company.fetchone()
-        if company_row:
-            company_name = company_row[0]
-        conn_company.close()
+        res = db.execute(text("SELECT name FROM companies WHERE id = :id"), {"id": request.company_id}).fetchone()
+        if res and res[0]:
+            company_name = res[0]
         
         # Send email using SendGrid
         email_sent = await email_service.send_otp_email(
@@ -179,23 +176,24 @@ async def send_otp(request: SendOTPRequest):
 
 
 @router.post("/verify-otp", response_model=VerifyOTPResponse)
-async def verify_otp(request: VerifyOTPRequest):
+async def verify_otp(request: VerifyOTPRequest, db: Session = Depends(get_db_session)):
     """Verify OTP code"""
     try:
-        conn = sqlite3.connect("referconnect.db")
-        cursor = conn.cursor()
-        
-        # Find valid OTP
-        cursor.execute("""
-            SELECT id, expires_at FROM otp_verifications 
-            WHERE company_id = ? AND company_email = ? AND otp_code = ? AND verified = FALSE
-            ORDER BY created_at DESC LIMIT 1
-        """, (request.company_id, request.company_email, request.otp_code))
-        
-        result = cursor.fetchone()
+        # Find valid OTP in Postgres
+        result = db.execute(
+            text("""
+                SELECT id, expires_at FROM otp_verifications
+                WHERE company_id = :company_id AND company_email = :company_email AND otp_code = :otp_code AND verified = FALSE
+                ORDER BY created_at DESC LIMIT 1
+            """),
+            {
+                "company_id": request.company_id,
+                "company_email": request.company_email,
+                "otp_code": request.otp_code,
+            }
+        ).fetchone()
         
         if not result:
-            conn.close()
             return VerifyOTPResponse(
                 success=False,
                 message="Invalid or expired OTP code"
@@ -213,12 +211,8 @@ async def verify_otp(request: VerifyOTPRequest):
             )
         
         # Mark OTP as verified
-        cursor.execute("""
-            UPDATE otp_verifications SET verified = TRUE WHERE id = ?
-        """, (otp_id,))
-        
-        conn.commit()
-        conn.close()
+        db.execute(text("UPDATE otp_verifications SET verified = TRUE WHERE id = :id"), {"id": otp_id})
+        db.commit()
         
         return VerifyOTPResponse(
             success=True,
@@ -231,22 +225,12 @@ async def verify_otp(request: VerifyOTPRequest):
 
 
 @router.get("/status")
-async def get_verification_status():
+async def get_verification_status(db: Session = Depends(get_db_session)):
     """Get verification status for current user"""
     try:
-        # Connect to database
-        conn = sqlite3.connect("referconnect.db")
-        cursor = conn.cursor()
-        
-        # Check if there are any verified OTPs for this user
-        # For now, we'll check if there are any verified OTPs in the system
-        cursor.execute("""
-            SELECT COUNT(*) FROM otp_verifications 
-            WHERE verified = 1
-        """)
-        verified_count = cursor.fetchone()[0]
-        
-        conn.close()
+        # Check if there are any verified OTPs in Postgres
+        res = db.execute(text("SELECT COUNT(*) FROM otp_verifications WHERE verified = TRUE")).fetchone()
+        verified_count = res[0] if res else 0
         
         # If there are verified OTPs, return verified status
         if verified_count > 0:
