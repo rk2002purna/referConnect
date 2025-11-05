@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -28,48 +28,37 @@ export function CompanySearchStep({ onCompanySelect, onPrevious, onNext }: Compa
   const [loading, setLoading] = useState(false)
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
   const [error, setError] = useState('')
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Mock companies data - will be replaced with API call when backend is ready
-  const mockCompanies: Company[] = [
-    { id: 1, name: 'Google', domain: 'google.com', industry: 'Technology', size: '10,000+', verified: true },
-    { id: 2, name: 'Microsoft', domain: 'microsoft.com', industry: 'Technology', size: '10,000+', verified: true },
-    { id: 3, name: 'Apple', domain: 'apple.com', industry: 'Technology', size: '10,000+', verified: true },
-    { id: 4, name: 'Amazon', domain: 'amazon.com', industry: 'E-commerce', size: '10,000+', verified: true },
-    { id: 5, name: 'Meta', domain: 'meta.com', industry: 'Technology', size: '10,000+', verified: true },
-    { id: 6, name: 'Netflix', domain: 'netflix.com', industry: 'Entertainment', size: '1,000-10,000', verified: true },
-    { id: 7, name: 'Tesla', domain: 'tesla.com', industry: 'Automotive', size: '1,000-10,000', verified: true },
-    { id: 8, name: 'Uber', domain: 'uber.com', industry: 'Transportation', size: '1,000-10,000', verified: true },
-    { id: 9, name: 'Airbnb', domain: 'airbnb.com', industry: 'Hospitality', size: '1,000-10,000', verified: true },
-    { id: 10, name: 'Stripe', domain: 'stripe.com', industry: 'Fintech', size: '100-1,000', verified: true },
-    { id: 11, name: 'Wipro', domain: 'wipro.com', industry: 'IT Services', size: '10,000+', verified: true },
-    { id: 12, name: 'Infosys', domain: 'infosys.com', industry: 'IT Services', size: '10,000+', verified: true },
-    { id: 13, name: 'TCS', domain: 'tcs.com', industry: 'IT Services', size: '10,000+', verified: true },
-    { id: 14, name: 'Accenture', domain: 'accenture.com', industry: 'Consulting', size: '10,000+', verified: true },
-    { id: 15, name: 'IBM', domain: 'ibm.com', industry: 'Technology', size: '10,000+', verified: true },
-    { id: 16, name: 'Oracle', domain: 'oracle.com', industry: 'Technology', size: '10,000+', verified: true },
-    { id: 17, name: 'Salesforce', domain: 'salesforce.com', industry: 'Technology', size: '10,000+', verified: true },
-    { id: 18, name: 'Adobe', domain: 'adobe.com', industry: 'Technology', size: '1,000-10,000', verified: true },
-    { id: 19, name: 'Spotify', domain: 'spotify.com', industry: 'Entertainment', size: '1,000-10,000', verified: true },
-    { id: 20, name: 'Zoom', domain: 'zoom.us', industry: 'Technology', size: '1,000-10,000', verified: true },
-    { id: 21, name: 'NRLord', domain: 'nrlord.com', industry: 'Technology', size: '1-100', verified: true },
-  ]
 
   // Fetch companies from API
   useEffect(() => {
     const fetchCompanies = async () => {
       setLoading(true)
       try {
+        console.log('Fetching companies from API...')
+        console.log('API Base URL:', process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1')
+        console.log('Full URL:', `${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/verification/companies`)
         const response = await verificationAPI.getVerifiedCompanies()
+        console.log('API Response:', response)
         const companiesData = response.data.companies
+        console.log('Companies data:', companiesData)
         setCompanies(companiesData)
         setFilteredCompanies(companiesData)
         setError('')
+        console.log('Successfully loaded companies from database')
       } catch (error) {
-        console.error('Failed to fetch companies:', error)
-        setError('Failed to load companies. Please try again.')
-        // Fallback to mock data
-        setCompanies(mockCompanies)
-        setFilteredCompanies(mockCompanies)
+        console.error('Failed to fetch companies from API:', error)
+        console.error('Error details:', {
+          message: (error as any).message,
+          status: (error as any).response?.status,
+          statusText: (error as any).response?.statusText,
+          data: (error as any).response?.data
+        })
+        setError(`Failed to load companies from database: ${(error as any).message || 'Unknown error'}`)
+        // No fallback - show error to user
+        setCompanies([])
+        setFilteredCompanies([])
       } finally {
         setLoading(false)
       }
@@ -79,30 +68,70 @@ export function CompanySearchStep({ onCompanySelect, onPrevious, onNext }: Compa
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleSearch = async (query: string) => {
-    setSearchQuery(query)
-    setLoading(true)
-    
-    try {
-      if (query.trim() === '') {
-        setFilteredCompanies(companies)
-      } else {
-        // Search via API
-        const response = await verificationAPI.getVerifiedCompanies(query)
-        const searchResults = response.data.companies
-        setFilteredCompanies(searchResults)
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
       }
-    } catch (error) {
-      console.error('Search failed:', error)
-      // Fallback to local search
-      const filtered = companies.filter(company =>
-        company.name.toLowerCase().includes(query.toLowerCase()) ||
-        company.domain.toLowerCase().includes(query.toLowerCase()) ||
-        company.industry?.toLowerCase().includes(query.toLowerCase())
-      )
-      setFilteredCompanies(filtered)
-    } finally {
+    }
+  }, [])
+
+  // Debounced search function
+  const debouncedSearch = useCallback(
+    (query: string) => {
+      // Clear existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+      
+      // Set new timeout
+      timeoutRef.current = setTimeout(async () => {
+        setLoading(true)
+        
+        try {
+          if (query.trim() === '') {
+            setFilteredCompanies(companies)
+          } else {
+            // Search via API
+            console.log('Searching companies via API with query:', query)
+            console.log('Search URL:', `${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/verification/companies?query=${query}`)
+            const response = await verificationAPI.getVerifiedCompanies(query)
+            console.log('Search API Response:', response)
+            const searchResults = response.data.companies
+            console.log('Search results:', searchResults)
+            setFilteredCompanies(searchResults)
+          }
+        } catch (error) {
+          console.error('Search API failed:', error)
+          console.error('Search error details:', {
+            message: (error as any).message,
+            status: (error as any).response?.status,
+            statusText: (error as any).response?.statusText,
+            data: (error as any).response?.data
+          })
+          // No fallback - show error
+          setError(`Search failed: ${(error as any).message || 'Unknown error'}`)
+          setFilteredCompanies([])
+        } finally {
+          setLoading(false)
+        }
+      }, 300) // 300ms delay
+    },
+    [companies]
+  )
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query)
+    setError('') // Clear any previous errors
+    
+    // If query is empty, show all companies immediately
+    if (query.trim() === '') {
+      setFilteredCompanies(companies)
       setLoading(false)
+    } else {
+      // For non-empty queries, use debounced search
+      debouncedSearch(query)
     }
   }
 
@@ -139,7 +168,6 @@ export function CompanySearchStep({ onCompanySelect, onPrevious, onNext }: Compa
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
           className="pl-10"
-          disabled={loading}
         />
         {loading && (
           <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />

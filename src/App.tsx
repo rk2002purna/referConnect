@@ -13,7 +13,6 @@ import { MyReferrals } from './pages/MyReferrals'
 import { Profile } from './pages/Profile'
 import { EmployeeProfile } from './pages/EmployeeProfile'
 import PostJob from './pages/PostJob'
-import { EmployeeDashboard } from './pages/EmployeeDashboard'
 import { Notifications } from './pages/Notifications'
 import { Debug } from './pages/Debug'
 import TokenDebug from './pages/TokenDebug'
@@ -176,14 +175,6 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Layout><PostJob /></Layout>
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="/dashboard" 
-                  element={
-                    <ProtectedRoute>
-                      <Layout><EmployeeDashboard /></Layout>
                     </ProtectedRoute>
                   } 
                 />

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { JobSeekerDashboard } from './JobSeekerDashboard'
-import { EmployeeDashboard } from './EmployeeDashboard'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { VerificationStatusBanner } from '../components/verification'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card'
@@ -41,15 +40,6 @@ export function Dashboard() {
     )
   }
 
-  if (user?.role === 'employee') {
-    return (
-      <ErrorBoundary>
-        <EmployeeDashboardWithVerification 
-          verificationStatus={verificationStatus}
-        />
-      </ErrorBoundary>
-    )
-  }
 
   // Admin or fallback dashboard
   return (
@@ -59,30 +49,6 @@ export function Dashboard() {
   )
 }
 
-function EmployeeDashboardWithVerification({ verificationStatus }: { verificationStatus: any }) {
-  return (
-    <div className="space-y-6">
-      {/* Verification Status Banner */}
-      {verificationStatus && verificationStatus.status !== 'verified' && (
-        <VerificationStatusBanner
-          status={verificationStatus.status}
-          verificationMethod={verificationStatus.method}
-          onRetry={() => {
-            // Navigate to verification flow
-            window.location.href = '/onboarding'
-          }}
-          onResendOTP={async () => {
-            // Handle OTP resend
-            console.log('Resending OTP...')
-          }}
-        />
-      )}
-      
-      {/* Regular Employee Dashboard */}
-      <EmployeeDashboard />
-    </div>
-  )
-}
 
 function AdminDashboard() {
   const { user } = useAuth()

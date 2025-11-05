@@ -267,7 +267,6 @@ export const dashboardAPI = {
   getProfileCompletion: () => api.get('/dashboard/profile-completion'),
   getStats: () => api.get('/dashboard/stats'),
   getJobSeekerDashboard: () => api.get('/dashboard/jobseeker'),
-  getEmployeeDashboard: () => api.get('/dashboard/employee'),
   getAdminDashboard: () => api.get('/dashboard/admin'),
   markActivityRead: (activityId: number) => api.post(`/dashboard/mark-activity-read/${activityId}`),
   markAllActivitiesRead: () => api.post('/dashboard/mark-all-activities-read'),
