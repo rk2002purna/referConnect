@@ -1,0 +1,72 @@
+================================================================================
+                    REFERCONNECT BACKEND - START COMMANDS
+================================================================================
+
+STEP 1: CREATE TABLES IN PGADMIN
+---------------------------------
+
+1. Open pgAdmin
+2. Connect to PostgreSQL server
+3. Right-click on "ReferConnect" database → Query Tool
+4. Open file: backend/create_all_tables.sql
+5. Copy ALL SQL content
+6. Paste into Query Tool
+7. Click Execute (F5)
+8. Wait for: "✅ All tables created successfully!"
+
+
+STEP 2: SEED COMPANIES DATA (OPTIONAL)
+---------------------------------------
+
+1. In pgAdmin Query Tool (same database)
+2. Open file: backend/seed_companies_data.sql
+3. Copy ALL SQL content
+4. Paste and Execute
+5. Wait for: "✅ Companies seeded successfully!"
+
+
+STEP 3: START BACKEND SERVICE
+------------------------------
+
+Run this command:
+
+    cd /Users/pradeepdyd/referconnect-frontend
+    ./start_backend.sh
+
+OR manually:
+
+    cd /Users/pradeepdyd/referconnect-frontend/backend
+    export $(cat .env | grep -v '^#' | xargs)
+    python3 main.py
+
+
+STEP 4: VERIFY BACKEND IS RUNNING
+----------------------------------
+
+Open in browser:
+- Health: http://localhost:8000/health
+- API Docs: http://localhost:8000/docs
+- API: http://localhost:8000
+
+
+IMPORTANT NOTES
+---------------
+
+1. Database name in .env: ReferConnect
+2. Update PostgreSQL credentials in backend/.env if different
+3. Make sure PostgreSQL is running before starting backend
+
+
+TROUBLESHOOTING
+---------------
+
+If backend fails:
+1. Check database connection
+2. Verify .env file has correct DATABASE_URL
+3. Install dependencies: pip3 install -r requirements.txt
+4. Check PostgreSQL is running
+
+
+================================================================================
+
+

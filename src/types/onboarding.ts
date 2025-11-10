@@ -113,6 +113,7 @@ export interface OnboardingStepProps {
   // Verification-specific props (optional for compatibility)
   onSelectMethod?: (method: 'email' | 'id_card') => void
   onCompanySelect?: (company: any) => void
+  onCompanyEmailSubmit?: (personalEmail: string, companyEmail: string) => Promise<void>
   onVerificationComplete?: (success: boolean) => void
   onUploadComplete?: (files: { selfie: File; idCard: File }) => void
   onResendOTP?: () => Promise<void>
@@ -220,6 +221,26 @@ export const EMPLOYEE_STEPS: OnboardingStep[] = [
     }
   },
   {
+    id: 'company-info',
+    title: 'Company Information',
+    description: 'Tell us about your role and company',
+    component: CompanyInfoStep,
+    isRequired: true,
+    validation: (data) => {
+      const errors: string[] = []
+      if (!data.employee?.job_title?.trim()) errors.push('Job title is required')
+      if (!data.employee?.years_at_company) errors.push('Years at company is required')
+      return errors
+    }
+  },
+  {
+    id: 'referral-preferences',
+    title: 'Referral Preferences',
+    description: 'How would you like to help with referrals?',
+    component: ReferralPreferencesStep,
+    isRequired: false
+  },
+  {
     id: 'company-email',
     title: 'Company Email',
     description: 'Enter your company email address',
@@ -270,25 +291,5 @@ export const EMPLOYEE_STEPS: OnboardingStep[] = [
       }
       return errors
     }
-  },
-  {
-    id: 'company-info',
-    title: 'Company Information',
-    description: 'Tell us about your role and company',
-    component: CompanyInfoStep,
-    isRequired: true,
-    validation: (data) => {
-      const errors: string[] = []
-      if (!data.employee?.job_title?.trim()) errors.push('Job title is required')
-      if (!data.employee?.years_at_company) errors.push('Years at company is required')
-      return errors
-    }
-  },
-  {
-    id: 'referral-preferences',
-    title: 'Referral Preferences',
-    description: 'How would you like to help with referrals?',
-    component: ReferralPreferencesStep,
-    isRequired: false
   }
 ]

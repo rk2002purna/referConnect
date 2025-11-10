@@ -46,11 +46,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const response = await authAPI.me()
       console.log('User response:', response.data)
-      setUser(response.data as User)
+      const userData = response.data as User
+      setUser(userData)
       
-      // If user is an employee, also fetch verification status
-      if ((response.data as User).role === 'employee') {
+      // If user is an employee, also fetch verification status BEFORE setting loading to false
+      if (userData.role === 'employee') {
+        console.log('User is employee, fetching verification status...')
         await refreshVerificationStatus()
+        console.log('Verification status fetched')
+      } else {
+        // For non-employees, clear verification status
+        setVerificationStatus(null)
       }
     } catch (error: any) {
       console.error('Failed to refresh user:', error)
@@ -66,17 +72,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setVerificationStatus(null)
     } finally {
       setLoading(false)
+      console.log('Auth loading complete')
     }
   }
 
   const refreshVerificationStatus = async () => {
+    console.log('Refreshing verification status...')
     try {
       const { verificationAPI } = await import('../lib/api')
       const response = await verificationAPI.getStatus()
+      console.log('✅ Verification status from API:', response.data)
       setVerificationStatus(response.data as VerificationStatus)
     } catch (error: any) {
-      console.error('Failed to refresh verification status:', error)
-      // Don't set verification status to null on error, keep existing state
+      console.error('❌ Failed to fetch verification status:', error)
+      console.log('Error status:', error?.response?.status)
+      
+      // If 404 or any error (no verification record exists yet for new user),
+      // set verification status to null to indicate NOT verified
+      console.log('⚠️ No verification found - user is NOT verified')
+      setVerificationStatus(null)
     }
   }
 

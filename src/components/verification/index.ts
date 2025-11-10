@@ -5,6 +5,7 @@ export { OTPVerificationStep } from './OTPVerificationStep'
 export { OTPVerificationModal } from './OTPVerificationModal'
 export { IDCardUploadStep } from './IDCardUploadStep'
 export { VerificationStatusBanner, type VerificationStatus } from './VerificationStatusBanner'
+export { VerificationSuccessModal } from './VerificationSuccessModal'
 
 // Wrapper components for onboarding integration
 export { VerificationMethodSelectionWrapper } from './VerificationMethodSelectionWrapper'

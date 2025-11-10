@@ -19,6 +19,8 @@ from sqlmodel import Session
 from sqlalchemy import text
 from app.db.session import get_db_session
 from app.schemas.verification import CompanySearchResponse
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -113,7 +115,11 @@ async def get_verified_companies(query: Optional[str] = None, db: Session = Depe
 
 
 @router.post("/send-otp", response_model=SendOTPResponse)
-async def send_otp(request: SendOTPRequest, db: Session = Depends(get_db_session)):
+async def send_otp(
+    request: SendOTPRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
     """Send OTP to company email for verification"""
     try:
         # Generate 6-digit OTP
@@ -139,7 +145,7 @@ async def send_otp(request: SendOTPRequest, db: Session = Depends(get_db_session
                 VALUES (:user_id, :company_id, :company_email, :otp_code, :expires_at)
             """),
             {
-                "user_id": 0,
+                "user_id": current_user.id,  # Use actual user ID
                 "company_id": request.company_id,
                 "company_email": request.company_email,
                 "otp_code": otp_code,
@@ -176,17 +182,22 @@ async def send_otp(request: SendOTPRequest, db: Session = Depends(get_db_session
 
 
 @router.post("/verify-otp", response_model=VerifyOTPResponse)
-async def verify_otp(request: VerifyOTPRequest, db: Session = Depends(get_db_session)):
+async def verify_otp(
+    request: VerifyOTPRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
     """Verify OTP code"""
     try:
-        # Find valid OTP in Postgres
+        # Find valid OTP in Postgres for this specific user
         result = db.execute(
             text("""
                 SELECT id, expires_at FROM otp_verifications
-                WHERE company_id = :company_id AND company_email = :company_email AND otp_code = :otp_code AND verified = FALSE
+                WHERE user_id = :user_id AND company_id = :company_id AND company_email = :company_email AND otp_code = :otp_code AND verified = FALSE
                 ORDER BY created_at DESC LIMIT 1
             """),
             {
+                "user_id": current_user.id,  # Filter by actual user ID
                 "company_id": request.company_id,
                 "company_email": request.company_email,
                 "otp_code": request.otp_code,
@@ -232,39 +243,52 @@ async def verify_otp(request: VerifyOTPRequest, db: Session = Depends(get_db_ses
 
 
 @router.get("/status")
-async def get_verification_status(db: Session = Depends(get_db_session)):
+async def get_verification_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
     """Get verification status for current user"""
     try:
-        # Check if there are any verified OTPs in Postgres
-        res = db.execute(text("SELECT COUNT(*) FROM otp_verifications WHERE verified = TRUE")).fetchone()
-        verified_count = res[0] if res else 0
+        # Check if current user has any verified OTPs in Postgres
+        res = db.execute(
+            text("""SELECT company_id, company_email, created_at 
+                    FROM otp_verifications 
+                    WHERE verified = TRUE AND user_id = :user_id
+                    ORDER BY created_at DESC 
+                    LIMIT 1"""),
+            {"user_id": current_user.id}
+        ).fetchone()
         
-        # If there are verified OTPs, return verified status
-        if verified_count > 0:
-            return {
+        # If there are verified OTPs for this user, return verified status with company_id
+        if res and res[0]:
+            company_id = res[0]
+            company_email = res[1] if res[1] else None
+            created_at = res[2] if res[2] else datetime.now(timezone.utc)
+            created_at_str = created_at.isoformat() if isinstance(created_at, datetime) else str(created_at)
+            
+            response_data = {
                 "status": "verified",
                 "method": "email",
-                "verified_at": "2025-01-15T00:00:00Z",
-                "created_at": "2025-01-15T00:00:00Z",
-                "updated_at": "2025-01-15T00:00:00Z"
-            }
-        else:
-            return {
-                "status": "pending_email",
-                "method": "email",
-                "created_at": "2025-01-15T00:00:00Z",
-                "updated_at": "2025-01-15T00:00:00Z"
+                "company_id": company_id,
+                "verified_at": created_at_str,
+                "created_at": created_at_str,
+                "updated_at": created_at_str
             }
             
+            # Include company_email if available
+            if company_email:
+                response_data["company_email"] = company_email
+            
+            return response_data
+        else:
+            # No verified OTP found for this user
+            raise HTTPException(status_code=404, detail="No verification found")
+            
+    except HTTPException:
+        raise
     except Exception as e:
-        # If there's an error, return verified status to allow job posting
-        return {
-            "status": "verified",
-            "method": "email",
-            "verified_at": "2025-01-15T00:00:00Z",
-            "created_at": "2025-01-15T00:00:00Z",
-            "updated_at": "2025-01-15T00:00:00Z"
-        }
+        # If there's an error, raise 404
+        raise HTTPException(status_code=404, detail="No verification found")
 
 @router.get("/health")
 async def health_check():

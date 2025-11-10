@@ -9,13 +9,14 @@ import { CheckCircle, ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { OnboardingData, JOB_SEEKER_STEPS, EMPLOYEE_STEPS } from '../../types/onboarding'
 import { profileAPI, verificationAPI } from '../../lib/api'
 import ResumeUploadStep from './ResumeUploadStep'
+import { VerificationSuccessModal } from '../verification/VerificationSuccessModal'
 
 interface OnboardingWizardProps {
   initialData?: Partial<OnboardingData>
 }
 
 export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
-  const { user } = useAuth()
+  const { user, verificationStatus, refreshVerificationStatus } = useAuth()
   const { refreshCompletionStatus, isOnboardingComplete } = useProfileCompletion()
   const navigate = useNavigate()
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
@@ -35,6 +36,9 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   })
   const [errors, setErrors] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showVerificationSuccess, setShowVerificationSuccess] = useState(false)
+  const [hasRedirected, setHasRedirected] = useState(false)
+  const redirectTimerRef = React.useRef<NodeJS.Timeout | null>(null)
 
 
   // Update data when user data changes
@@ -99,20 +103,14 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   const currentStep = steps[currentStepIndex]
   const progress = ((currentStepIndex + 1) / steps.length) * 100
 
-  // Check if onboarding is already completed and redirect accordingly
+  // Cleanup timer on unmount
   useEffect(() => {
-    // Use server-side completion status instead of localStorage
-    if (isOnboardingComplete && !isSubmitting && currentStepIndex < steps.length - 1) {
-      console.log('Onboarding already completed, redirecting...')
-      if (user?.role === 'jobseeker') {
-        navigate('/search', { replace: true })
-      } else if (user?.role === 'employee') {
-        navigate('/post-job', { replace: true })
-      } else {
-        navigate('/profile', { replace: true })
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current)
       }
     }
-  }, [isOnboardingComplete, navigate, isSubmitting, currentStepIndex, steps.length, user?.role])
+  }, [])
 
   const updateData = (updates: Partial<OnboardingData>) => {
     console.log('Updating onboarding data with:', updates)
@@ -175,18 +173,129 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
     setCurrentStepIndex(prev => prev + 1)
   }
 
+  // Handle company email submission and OTP send
+  const handleCompanyEmailSubmit = async (personalEmail: string, companyEmail: string) => {
+    console.log('Company email submitted:', { personalEmail, companyEmail })
+    updateData({
+      verification: {
+        ...data.verification,
+        personal_email: personalEmail,
+        company_email: companyEmail,
+        status: 'pending_email'
+      }
+    })
+    // Move to next step after email submission (OTP verification)
+    setCurrentStepIndex(prev => prev + 1)
+  }
+
   // Handle OTP verification
-  const handleOTPVerification = (success: boolean) => {
+  const handleOTPVerification = async (success: boolean) => {
     if (success) {
-      updateData({
-        verification: {
-          ...data.verification,
-          status: 'verified'
+      console.log('OTP Verification successful - starting save process...')
+      
+      // Set flags FIRST to prevent any redirects from useEffect
+      setHasRedirected(true)
+      setIsSubmitting(true)
+      
+      // Show success modal immediately to prevent any UI changes
+      setShowVerificationSuccess(true)
+      
+      try {
+        // Save basic profile information first
+        await profileAPI.updateProfile({
+          first_name: data.first_name,
+          last_name: data.last_name,
+          phone: data.phone,
+          location: data.location,
+          bio: data.bio
+        })
+        console.log('✓ Basic profile saved')
+
+        // Save employee profile
+        if (user?.role === 'employee' && data.employee) {
+          await profileAPI.updateEmployeeProfile({
+            title: data.employee.job_title,
+            badges: data.employee.skills_areas?.join(',') || ''
+          })
+          console.log('✓ Employee profile saved')
+          
+          // Save employee company data to localStorage for the EmployeeProfile component
+          const companyData = {
+            company_name: data.verification?.company_name || '',
+            company_industry: 'Technology',
+            company_email: data.verification?.company_email || data.email,
+            office_location: data.employee?.office_location || data.location || '',
+            job_title: data.employee?.job_title || '',
+            department: data.employee?.department || '',
+            years_at_company: data.employee?.years_at_company || 0
+          }
+          localStorage.setItem('employee_company_data', JSON.stringify(companyData))
+          console.log('✓ Employee company data saved to localStorage')
         }
-      })
-      // Move to next step after OTP verification
-      setCurrentStepIndex(prev => prev + 1)
+        
+        // NOTE: Don't manually update verification status - it's already set by verifyOTP endpoint
+        // The backend automatically sets status to 'verified' when OTP is successfully verified
+        
+        // Set localStorage flags as backup
+        localStorage.setItem('onboarding_completed', 'true')
+        localStorage.setItem('onboarding_completed_role', user?.role || '')
+        console.log('✓ Onboarding marked as completed in localStorage')
+        
+        // Update local state
+        updateData({
+          verification: {
+            ...data.verification,
+            status: 'verified'
+          }
+        })
+        
+        // Refresh verification status from server
+        await refreshVerificationStatus()
+        console.log('✓ Verification status refreshed from server')
+        
+        // Wait longer to ensure verification status is fully updated in context
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Log the current verification status to verify it's updated
+        console.log('Current verification status after refresh:', verificationStatus)
+        
+        console.log('✓ All data saved successfully - ready to redirect')
+      } catch (error) {
+        console.error('❌ Failed to save profile data:', error)
+        // Continue with verification even if profile save fails
+      }
+      
+      // Auto-redirect after showing modal for 2 seconds (user can also click button)
+      redirectTimerRef.current = setTimeout(() => {
+        handleVerificationSuccessContinue()
+      }, 2000)
     }
+  }
+  
+  // Handle verification success modal close and redirect
+  const handleVerificationSuccessContinue = () => {
+    console.log('User clicked continue or auto-redirect triggered')
+    
+    // Clear auto-redirect timer if it exists
+    if (redirectTimerRef.current) {
+      clearTimeout(redirectTimerRef.current)
+      redirectTimerRef.current = null
+    }
+    
+    // Close modal
+    setShowVerificationSuccess(false)
+    
+    // Ensure flags are still set
+    setHasRedirected(true)
+    setIsSubmitting(true)
+    
+    // Set sessionStorage flag to allow immediate access to /post-job
+    sessionStorage.setItem('just_verified', 'true')
+    
+    console.log('Redirecting to /post-job...')
+    
+    // Redirect immediately to post-job page
+    navigate('/post-job', { replace: true })
   }
 
   // Handle OTP resend
@@ -375,6 +484,21 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
 
   const StepComponent = currentStep.component
 
+  // If user is verified and we're showing success modal, don't render onboarding content
+  // This prevents any rendering issues while redirecting
+  if (showVerificationSuccess) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
+        <VerificationSuccessModal
+          isOpen={showVerificationSuccess}
+          onClose={() => setShowVerificationSuccess(false)}
+          onContinue={handleVerificationSuccessContinue}
+          companyName={data.verification?.company_name}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl">
@@ -473,6 +597,7 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
               // Verification-specific props
               onSelectMethod={handleVerificationMethodSelect}
               onCompanySelect={handleCompanySelect}
+              onCompanyEmailSubmit={handleCompanyEmailSubmit}
               onVerificationComplete={handleOTPVerification}
               onUploadComplete={handleIDCardUpload}
               onResendOTP={handleResendOTP}
@@ -480,50 +605,60 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
               companyId={data.verification?.company_id || 0}
             />
 
-            {/* Navigation Buttons */}
-            <div className="flex items-center justify-between mt-8 pt-6 border-t">
-              <Button
-                variant="outline"
-                onClick={handlePrevious}
-                disabled={currentStepIndex === 0}
-                className="flex items-center"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Previous
-              </Button>
-
-              <div className="flex items-center space-x-3">
-                {!currentStep.isRequired && (
-                  <Button
-                    variant="ghost"
-                    onClick={handleSkip}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    Skip for now
-                  </Button>
-                )}
-                
+            {/* Navigation Buttons - Hide for steps with custom navigation */}
+            {!['verification-method', 'company-search', 'company-email', 'otp-verification', 'id-card-upload'].includes(currentStep.id) && (
+              <div className="flex items-center justify-between mt-8 pt-6 border-t">
                 <Button
-                  onClick={handleNext}
-                  disabled={isSubmitting}
+                  variant="outline"
+                  onClick={handlePrevious}
+                  disabled={currentStepIndex === 0}
                   className="flex items-center"
                 >
-                  {isSubmitting ? (
-                    'Saving...'
-                  ) : currentStepIndex === steps.length - 1 ? (
-                    'Complete Setup'
-                  ) : (
-                    <>
-                      Next
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </>
-                  )}
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Previous
                 </Button>
+
+                <div className="flex items-center space-x-3">
+                  {!currentStep.isRequired && (
+                    <Button
+                      variant="ghost"
+                      onClick={handleSkip}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      Skip for now
+                    </Button>
+                  )}
+                  
+                  <Button
+                    onClick={handleNext}
+                    disabled={isSubmitting}
+                    className="flex items-center"
+                  >
+                    {isSubmitting ? (
+                      'Saving...'
+                    ) : currentStepIndex === steps.length - 1 ? (
+                      'Complete Setup'
+                    ) : (
+                      <>
+                        Next
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
+      
+      {/* Verification Success Modal */}
+      <VerificationSuccessModal
+        isOpen={showVerificationSuccess}
+        onClose={() => setShowVerificationSuccess(false)}
+        onContinue={handleVerificationSuccessContinue}
+        companyName={data.verification?.company_name}
+      />
     </div>
   )
 }

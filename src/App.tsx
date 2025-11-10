@@ -20,7 +20,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 
 // Protected Route component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, loading, verificationStatus } = useAuth()
   const { loading: completionLoading, isOnboardingComplete } = useProfileCompletion()
 
   if (loading || completionLoading) {
@@ -35,17 +35,31 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
-  // Allow access to profile page, debug page, and post-job page even if onboarding is incomplete
   const currentPath = window.location.pathname
+  const justVerified = sessionStorage.getItem('just_verified') === 'true'
   
-  // Use server-side completion status only - no localStorage fallback
-  console.log('ProtectedRoute - isOnboardingComplete:', isOnboardingComplete, 'currentPath:', currentPath)
+  console.log('ProtectedRoute - isOnboardingComplete:', isOnboardingComplete, 'currentPath:', currentPath, 'justVerified:', justVerified)
   
-  // Always redirect to onboarding if not complete, except for specific allowed pages
+  // If user is on /onboarding but already completed, redirect them away
+  if (currentPath === '/onboarding' && isOnboardingComplete && !justVerified) {
+    console.log('User already completed onboarding, redirecting away from /onboarding')
+    if (user.role === 'employee') {
+      return <Navigate to="/post-job" replace />
+    } else if (user.role === 'jobseeker') {
+      return <Navigate to="/search" replace />
+    }
+  }
+  
+  // Always redirect to onboarding if not complete, except for specific allowed pages OR just verified
   const allowedPaths = ['/profile', '/onboarding', '/debug']
-  if (!isOnboardingComplete && !allowedPaths.includes(currentPath)) {
+  if (!isOnboardingComplete && !allowedPaths.includes(currentPath) && !justVerified) {
     console.log('Redirecting to onboarding - completion status:', isOnboardingComplete)
     return <Navigate to="/onboarding" replace />
+  }
+  
+  // Clear the just_verified flag after first successful load
+  if (justVerified && currentPath === '/post-job') {
+    sessionStorage.removeItem('just_verified')
   }
 
   return <>{children}</>
@@ -53,10 +67,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Public Route component (redirect to dashboard if already logged in)
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, loading, verificationStatus } = useAuth()
   const { loading: completionLoading, isOnboardingComplete } = useProfileCompletion()
 
+  console.log('=== PublicRoute Debug ===')
+  console.log('Auth loading:', loading)
+  console.log('Completion loading:', completionLoading)
+  console.log('User:', user)
+  console.log('User role:', user?.role)
+  console.log('Verification Status:', verificationStatus)
+  console.log('isOnboardingComplete:', isOnboardingComplete)
+  console.log('========================')
+
   if (loading || completionLoading) {
+    console.log('PublicRoute: Still loading, showing spinner')
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -65,21 +89,45 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (user) {
-    // Use server-side completion status only - no localStorage fallback
-    console.log('PublicRoute - isOnboardingComplete:', isOnboardingComplete, 'user role:', user.role)
+    console.log('PublicRoute - User logged in')
     
+    // CRITICAL FIX: For employees, ONLY check verification status
+    if (user.role === 'employee') {
+      console.log('Employee check:')
+      console.log('  - Verification object:', verificationStatus)
+      console.log('  - Verification status:', verificationStatus?.status)
+      console.log('  - Company ID:', verificationStatus?.company_id)
+      
+      // REAL verification should have:
+      // 1. status === 'verified'
+      // 2. company_id (they selected a company)
+      // Without company_id, it's a fake/incomplete verification
+      const isVerified = verificationStatus?.status === 'verified' && verificationStatus?.company_id
+      
+      console.log('  - Is TRULY verified (with company)?', isVerified)
+      
+      if (isVerified) {
+        console.log('  → Employee is TRULY verified (has company), redirecting to /post-job')
+        return <Navigate to="/post-job" replace />
+      } else {
+        console.log('  → Employee NOT truly verified (missing company or not verified), redirecting to /onboarding')
+        return <Navigate to="/onboarding" replace />
+      }
+    }
+    
+    // For job seekers, use completion status
     if (isOnboardingComplete) {
-      // Redirect based on user role
-      const redirectPath = user.role === 'jobseeker' ? '/search' : '/post-job'
-      console.log('Redirecting to:', redirectPath)
+      const redirectPath = '/search'
+      console.log('Job seeker - Onboarding complete, redirecting to:', redirectPath)
       return <Navigate to={redirectPath} replace />
     }
     
     // If onboarding is not completed, redirect to onboarding
-    console.log('Redirecting to onboarding because completion is false')
+    console.log('Job seeker - Onboarding NOT complete, redirecting to /onboarding')
     return <Navigate to="/onboarding" replace />
   }
 
+  console.log('PublicRoute - No user, showing public content')
   return <>{children}</>
 }
 

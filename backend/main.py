@@ -178,6 +178,7 @@ def run_migrations():
     except Exception as e:
         print(f"❌ Error creating tables: {e}")
         return False
+app = create_app()
 
 if __name__ == "__main__":
     # Get port from environment variable, default to 8000
@@ -199,7 +200,7 @@ if __name__ == "__main__":
             print("⚠️  Migrations failed, but continuing with server startup...")
     
     # Create the app
-    app = create_app()
+    
     
     # Run the app
     uvicorn.run(app, host=host, port=port, log_level="info")

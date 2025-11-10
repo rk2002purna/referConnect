@@ -24,7 +24,7 @@ interface ProfileCompletionProviderProps {
 }
 
 export function ProfileCompletionProvider({ children }: ProfileCompletionProviderProps) {
-  const { user } = useAuth()
+  const { user, verificationStatus, loading: authLoading } = useAuth()
   const [completionStatus, setCompletionStatus] = useState<ProfileCompletionResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -43,6 +43,13 @@ export function ProfileCompletionProvider({ children }: ProfileCompletionProvide
       console.log('Profile completion status from server:', completionData)
       console.log('Is onboarding complete?', completionData.is_complete)
       console.log('User role:', user?.role)
+      
+      // IMPORTANT: For employees, ignore backend completion status
+      // We ONLY use verification status for employees
+      if (user.role === 'employee') {
+        console.log('⚠️ User is employee - ignoring backend completion status')
+        console.log('⚠️ Employee completion determined by verification status only')
+      }
       
       // Clear any stale localStorage flags to ensure server-side status is used
       if (!completionData.is_complete) {
@@ -76,11 +83,57 @@ export function ProfileCompletionProvider({ children }: ProfileCompletionProvide
     refreshCompletionStatus()
   }, [refreshCompletionStatus])
 
-  const isOnboardingComplete = completionStatus?.is_complete || false
+  const isOnboardingComplete = (() => {
+    console.log('=== Calculating isOnboardingComplete ===')
+    console.log('User:', user)
+    console.log('User role:', user?.role)
+    console.log('Auth loading:', authLoading)
+    console.log('Verification status OBJECT:', JSON.stringify(verificationStatus, null, 2))
+    console.log('Verification status?.status:', verificationStatus?.status)
+    
+    // DEFAULT: If no user, return false
+    if (!user) {
+      console.log('No user - returning FALSE')
+      return false
+    }
+    
+    // For employees: Check verification status AND company_id
+    if (user.role === 'employee') {
+      // Wait for auth to finish loading
+      if (authLoading) {
+        console.log('Employee: Still loading - return FALSE')
+        return false
+      }
+      
+      // CRITICAL: Must have BOTH verified status AND company_id
+      const hasCompanyId = verificationStatus?.company_id && verificationStatus.company_id > 0
+      const isVerifiedStatus = verificationStatus?.status === 'verified'
+      const isVerified = isVerifiedStatus && hasCompanyId
+      
+      console.log('Employee verification check:')
+      console.log('  - verificationStatus is null?', verificationStatus === null)
+      console.log('  - verificationStatus.status:', verificationStatus?.status)
+      console.log('  - Is status "verified"?', isVerifiedStatus)
+      console.log('  - verificationStatus.company_id:', verificationStatus?.company_id)
+      console.log('  - Has company_id?', hasCompanyId)
+      console.log('  - FINAL RESULT: isVerified =', isVerified, '(needs BOTH verified status AND company_id)')
+      console.log('Employee: Onboarding complete =', isVerified)
+      console.log('=======================================')
+      
+      // DEFAULT TO FALSE for employees
+      return isVerified || false
+    }
+    
+    // For job seekers, use the server-side completion status
+    const serverComplete = completionStatus?.is_complete || false
+    console.log('Job seeker: Server complete =', serverComplete)
+    console.log('=======================================')
+    return serverComplete
+  })()
 
   const value = {
     completionStatus,
-    loading,
+    loading: loading || authLoading, // Include auth loading in overall loading state
     refreshCompletionStatus,
     isOnboardingComplete
   }

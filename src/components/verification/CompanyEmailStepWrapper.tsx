@@ -4,7 +4,7 @@ import { OnboardingStepProps } from '../../types/onboarding'
 import { verificationAPI } from '../../lib/api'
 
 export function CompanyEmailStepWrapper(props: OnboardingStepProps) {
-  const { data, onPrevious, onNext } = props
+  const { data, onPrevious, onCompanyEmailSubmit } = props
   const [isSendingOTP, setIsSendingOTP] = useState(false)
   const [otpError, setOtpError] = useState('')
   
@@ -30,18 +30,10 @@ export function CompanyEmailStepWrapper(props: OnboardingStepProps) {
       })
 
       if (response.data.success) {
-        // Update the data with both emails and OTP info
-        props.updateData({
-          verification: {
-            ...data.verification,
-            personal_email: personalEmail,
-            company_email: companyEmail,
-            status: 'pending_email'
-          }
-        })
-        
-        // Move to next step (OTP verification)
-        onNext()
+        // Call the wizard's handler to update data and move to next step
+        if (onCompanyEmailSubmit) {
+          await onCompanyEmailSubmit(personalEmail, companyEmail)
+        }
       } else {
         setOtpError(response.data.message || 'Failed to send verification code')
       }
@@ -68,7 +60,6 @@ export function CompanyEmailStepWrapper(props: OnboardingStepProps) {
       personalEmail={personalEmail}
       onEmailSubmit={handleEmailSubmit}
       onPrevious={onPrevious}
-      onNext={onNext}
       isSendingOTP={isSendingOTP}
       otpError={otpError}
     />

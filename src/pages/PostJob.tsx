@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -33,13 +33,23 @@ interface JobFormData {
 }
 
 const PostJob: React.FC = () => {
-  const { user, verificationStatus } = useAuth()
+  const { user, verificationStatus, refreshVerificationStatus } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const verificationStatusRef = useRef(verificationStatus)
+  const justVerified = (location.state as any)?.justVerified || false
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState(false)
   const [newSkill, setNewSkill] = useState('')
+  const [hasCheckedVerification, setHasCheckedVerification] = useState(false)
+  const [isCheckingVerification, setIsCheckingVerification] = useState(true)
+  
+  // Keep ref in sync with verificationStatus
+  useEffect(() => {
+    verificationStatusRef.current = verificationStatus
+  }, [verificationStatus])
 
   const [formData, setFormData] = useState<JobFormData>({
     title: '',
@@ -93,6 +103,9 @@ const PostJob: React.FC = () => {
   }
 
   useEffect(() => {
+    // Prevent multiple checks and redirects
+    if (hasCheckedVerification) return
+    
     if (!user) {
       navigate('/login')
       return
@@ -102,9 +115,79 @@ const PostJob: React.FC = () => {
       return
     }
     
-    // Load company data when component mounts
-    loadCompanyData()
-  }, [user, navigate])
+    // If we just verified, wait a bit longer for verification status to be available
+    const checkTimeout = justVerified ? 2000 : 1000
+    
+    // Check if user is verified - if not, redirect to onboarding
+    if (verificationStatus !== null) {
+      // Verification status has been loaded
+      setIsCheckingVerification(false)
+      setHasCheckedVerification(true)
+      
+      if (verificationStatus.status !== 'verified') {
+        // If we just verified but status is not verified yet, wait a bit more and refresh
+        if (justVerified) {
+          // Refresh verification status in case it wasn't loaded yet
+          refreshVerificationStatus()
+          
+          const timer = setTimeout(() => {
+            const currentStatus = verificationStatusRef.current
+            if (!currentStatus || currentStatus.status !== 'verified') {
+              console.log('User not verified after verification, but we just verified - allowing access')
+              // Since we just verified, allow access anyway - verification status will update soon
+              loadCompanyData()
+            } else {
+              loadCompanyData()
+            }
+          }, 2000)
+          return () => clearTimeout(timer)
+        }
+        
+        console.log('User not verified, redirecting to onboarding...')
+        navigate('/onboarding', { replace: true })
+        return
+      }
+      
+      // User is verified, load company data
+      loadCompanyData()
+    } else {
+      // If verification status is not loaded yet, wait a bit and check again
+      // This handles the case where verification status is still loading
+      const timer = setTimeout(() => {
+        setIsCheckingVerification(false)
+        setHasCheckedVerification(true)
+        
+        // Re-check verification status after timeout using ref
+        const currentStatus = verificationStatusRef.current
+        
+        // If we just verified, give it more time before redirecting
+        if (justVerified && (!currentStatus || currentStatus.status !== 'verified')) {
+          console.log('Just verified but status not loaded yet, waiting a bit more...')
+          // Wait another second and check again
+          setTimeout(() => {
+            const finalStatus = verificationStatusRef.current
+            if (!finalStatus || finalStatus.status !== 'verified') {
+              console.log('Still not verified after extended wait, but we just verified - allowing access')
+              // Since we just verified, allow access anyway
+              loadCompanyData()
+            } else {
+              loadCompanyData()
+            }
+          }, 1500)
+          return
+        }
+        
+        if (!currentStatus || currentStatus.status !== 'verified') {
+          console.log('User not verified (after timeout), redirecting to onboarding...')
+          navigate('/onboarding', { replace: true })
+        } else {
+          // User is verified, load company data
+          loadCompanyData()
+        }
+      }, checkTimeout)
+      return () => clearTimeout(timer)
+    }
+  }, [user, navigate, verificationStatus, hasCheckedVerification, justVerified])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
@@ -144,6 +227,11 @@ const PostJob: React.FC = () => {
     setSuccess(null)
 
     try {
+      // Check if user is verified before allowing job posting
+      if (!verificationStatus || verificationStatus.status !== 'verified') {
+        throw new Error('You must verify your company email before posting jobs. Please complete the verification process.')
+      }
+      
       // Validate required fields
       if (!formData.title.trim()) {
         throw new Error('Job title is required')
@@ -272,6 +360,18 @@ const PostJob: React.FC = () => {
   // Check if employee is verified
   const isVerified = verificationStatus?.status === 'verified'
   const isVerificationPending = verificationStatus && verificationStatus.status !== 'verified'
+
+  // Show loading state while checking verification
+  if (isCheckingVerification) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600 mb-4" />
+          <p className="text-gray-600">Checking verification status...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

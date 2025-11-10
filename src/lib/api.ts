@@ -246,7 +246,7 @@ export const verificationAPI = {
 
   // Verification status
   getStatus: () => api.get<VerificationStatus>('/verification/status'),
-  updateStatus: (data: UpdateVerificationStatusData) => api.put<{ message: string }>('/verification/status', data),
+  updateStatus: (data: UpdateVerificationStatusData) => api.post<{ message: string }>('/verification/status', data),
   
   // Admin verification management
   getPendingVerifications: (params?: PaginationParams) => api.get('/verification/admin/pending', { params }),

@@ -10,7 +10,6 @@ interface CompanyEmailStepProps {
   personalEmail: string
   onEmailSubmit: (personalEmail: string, companyEmail: string) => void
   onPrevious?: () => void
-  onNext?: () => void
   isSendingOTP?: boolean
   otpError?: string
 }
@@ -20,8 +19,7 @@ export function CompanyEmailStep({
   companyDomain, 
   personalEmail,
   onEmailSubmit, 
-  onPrevious, 
-  onNext,
+  onPrevious,
   isSendingOTP = false,
   otpError = ''
 }: CompanyEmailStepProps) {
