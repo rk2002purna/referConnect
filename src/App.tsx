@@ -20,7 +20,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 
 // Protected Route component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading, verificationStatus } = useAuth()
+  const { user, loading } = useAuth()
   const { loading: completionLoading, isOnboardingComplete } = useProfileCompletion()
 
   if (loading || completionLoading) {
