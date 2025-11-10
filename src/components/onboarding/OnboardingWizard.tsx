@@ -17,7 +17,7 @@ interface OnboardingWizardProps {
 
 export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   const { user, verificationStatus, refreshVerificationStatus } = useAuth()
-  const { refreshCompletionStatus, isOnboardingComplete } = useProfileCompletion()
+  const { refreshCompletionStatus } = useProfileCompletion()
   const navigate = useNavigate()
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [data, setData] = useState<OnboardingData>({
@@ -37,7 +37,6 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   const [errors, setErrors] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showVerificationSuccess, setShowVerificationSuccess] = useState(false)
-  const [hasRedirected, setHasRedirected] = useState(false)
   const redirectTimerRef = React.useRef<NodeJS.Timeout | null>(null)
 
 
@@ -194,7 +193,6 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
       console.log('OTP Verification successful - starting save process...')
       
       // Set flags FIRST to prevent any redirects from useEffect
-      setHasRedirected(true)
       setIsSubmitting(true)
       
       // Show success modal immediately to prevent any UI changes
@@ -285,8 +283,7 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
     // Close modal
     setShowVerificationSuccess(false)
     
-    // Ensure flags are still set
-    setHasRedirected(true)
+    // Ensure submitting flag is still set
     setIsSubmitting(true)
     
     // Set sessionStorage flag to allow immediate access to /post-job

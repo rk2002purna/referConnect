@@ -187,6 +187,7 @@ const PostJob: React.FC = () => {
       }, checkTimeout)
       return () => clearTimeout(timer)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, navigate, verificationStatus, hasCheckedVerification, justVerified])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {

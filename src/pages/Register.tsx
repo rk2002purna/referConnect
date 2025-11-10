@@ -21,9 +21,7 @@ export function Register() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   
-  const { register, user } = useAuth()
-  const { isOnboardingComplete } = useProfileCompletion()
-  const navigate = useNavigate()
+  const { register } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
