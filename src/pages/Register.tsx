@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useProfileCompletion } from '../contexts/ProfileCompletionContext'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card'
