@@ -14,29 +14,33 @@ class JobPostService:
 
     def create_job_post(self, user_id: int, job_data: JobPostCreate) -> JobPostResponse:
         """Create a new job posting"""
-        # Convert skills list to JSON string
-        skills_json = json.dumps(job_data.skills_required) if job_data.skills_required else None
+        # Get user's employee profile to get employee_id and company_id
+        from ..models.user import Employee
+        employee_result = self.db.execute(
+            select(Employee).where(Employee.user_id == user_id)
+        )
+        employee = employee_result.scalar_one_or_none()
+        
+        if not employee:
+            raise ValueError("User does not have an employee profile")
+        
+        if not employee.company_id:
+            raise ValueError("Employee does not have a company_id")
+        
+        # Convert skills list to comma-separated string
+        skills_str = ','.join(job_data.skills_required) if job_data.skills_required else ''
         
         job = Job(
             title=job_data.title,
-            company=job_data.company,
-            location=job_data.location,
-            job_type=job_data.job_type.value,
-            salary_min=job_data.salary_min,
-            salary_max=job_data.salary_max,
-            currency=job_data.currency,
             description=job_data.description,
-            requirements=job_data.requirements,
-            benefits=job_data.benefits,
-            skills_required=skills_json,
-            experience_level=job_data.experience_level.value,
-            remote_work=job_data.remote_work,
-            application_deadline=job_data.application_deadline,
-            contact_email=job_data.contact_email,
-            department=job_data.department,
-            posted_by=user_id,
-            views=0,
-            applications_count=0
+            location=job_data.location,
+            employment_type=job_data.job_type.value,
+            skills=skills_str,
+            min_experience=0,  # You can map this from experience_level if needed
+            company_id=employee.company_id,
+            employee_id=employee.id,
+            is_active=True,
+            job_link=job_data.job_link if hasattr(job_data, 'job_link') else None
         )
         
         self.db.add(job)
@@ -61,30 +65,46 @@ class JobPostService:
         """Get job posts created by a specific user"""
         offset = (page - 1) * per_page
         
-        # Get total count
-        count_result =  self.db.execute(
-            select(func.count(Job.id)).where(Job.posted_by == user_id)
+        # Get user's employee_id first
+        from ..models.user import Employee
+        employee_result = self.db.execute(
+            select(Employee).where(Employee.user_id == user_id)
         )
-        total = count_result.scalar()
+        employee = employee_result.scalar_one_or_none()
+        
+        if not employee:
+            return JobPostListResponse(
+                jobs=[],
+                total=0,
+                page=page,
+                per_page=per_page,
+                total_pages=0
+            )
+        
+        # Get total count
+        count_result = self.db.execute(
+            select(func.count(Job.id)).where(Job.employee_id == employee.id)
+        )
+        total = count_result.scalar() or 0
         
         # Get jobs
         result = self.db.execute(
             select(Job)
-            .where(Job.posted_by == user_id)
+            .where(Job.employee_id == employee.id)
             .order_by(Job.created_at.desc())
             .offset(offset)
             .limit(per_page)
         )
         jobs = result.scalars().all()
         
-        job_responses = [ self._job_to_response(job) for job in jobs]
+        job_responses = [self._job_to_response(job) for job in jobs]
         
         return JobPostListResponse(
             jobs=job_responses,
             total=total,
             page=page,
             per_page=per_page,
-            total_pages=(total + per_page - 1) // per_page
+            total_pages=(total + per_page - 1) // per_page if total > 0 else 0
         )
 
     def get_active_job_posts(self, page: int = 1, per_page: int = 10, 
@@ -196,39 +216,43 @@ class JobPostService:
 
     def _job_to_response(self, job: Job) -> JobPostResponse:
         """Convert Job model to JobPostResponse"""
-        # Parse skills from JSON string
-        skills = []
-        if job.skills_required:
-            try:
-                skills = json.loads(job.skills_required)
-            except (json.JSONDecodeError, TypeError):
-                skills = []
+        # Parse skills from comma-separated string
+        skills = job.skills.split(',') if job.skills else []
+        skills = [s.strip() for s in skills if s.strip()]  # Remove empty strings and whitespace
+        
+        # Get company name from company_id
+        from ..models.user import Company
+        company_result = self.db.execute(
+            select(Company).where(Company.id == job.company_id)
+        )
+        company = company_result.scalar_one_or_none()
+        company_name = company.name if company else "Unknown Company"
         
         return JobPostResponse(
             id=job.id,
             title=job.title,
-            company=job.company,
+            company=company_name,
             location=job.location,
-            job_type=job.job_type,
-            salary_min=job.salary_min,
-            salary_max=job.salary_max,
-            currency=job.currency,
+            job_type=job.employment_type,
+            salary_min=None,  # Not in current schema
+            salary_max=None,  # Not in current schema
+            currency="USD",
             description=job.description,
-            requirements=job.requirements,
-            benefits=job.benefits,
+            requirements=None,  # Not in current schema
+            benefits=None,  # Not in current schema
             skills_required=skills,
-            experience_level=job.experience_level,
-            remote_work=job.remote_work,
-            application_deadline=job.application_deadline,
-            contact_email=job.contact_email,
-            department=job.department,
+            experience_level="mid",  # You can map from min_experience if needed
+            remote_work=False,  # Not in current schema
+            application_deadline=None,  # Not in current schema
+            contact_email="",  # Not in current schema
+            department=None,  # Not in current schema
             job_link=job.job_link,
-            max_applicants=job.max_applicants,
+            max_applicants=None,  # Not in current schema
             is_active=job.is_active,
-            views=job.views,
-            applications_count=job.applications_count,
+            views=0,  # Not in current schema
+            applications_count=0,  # Not in current schema
             created_at=job.created_at,
             updated_at=job.updated_at,
-            posted_by=job.posted_by
+            posted_by=job.employee_id  # Using employee_id instead of user_id
         )
 

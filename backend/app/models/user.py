@@ -129,27 +129,15 @@ class Job(TimestampedModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str = Field(index=True, max_length=255)
-    company: str = Field(max_length=255)
-    location: str = Field(max_length=255)
-    job_type: str = Field(max_length=50)  # full-time, part-time, contract, internship
-    salary_min: Optional[int] = Field(default=None)
-    salary_max: Optional[int] = Field(default=None)
-    currency: str = Field(default="USD", max_length=3)
     description: str
-    requirements: Optional[str] = Field(default=None)
-    benefits: Optional[str] = Field(default=None)
-    skills_required: Optional[str] = Field(default=None)  # JSON string of skills array
-    experience_level: str = Field(max_length=20)  # entry, mid, senior, executive
-    remote_work: bool = Field(default=False)
-    application_deadline: Optional[datetime] = Field(default=None)
-    contact_email: str = Field(max_length=255)
-    department: Optional[str] = Field(default=None, max_length=255)
-    job_link: Optional[str] = Field(default=None, max_length=500)
-    max_applicants: Optional[int] = Field(default=None)
+    location: str = Field(max_length=255)
+    employment_type: str = Field(max_length=50)  # full-time, part-time, contract, internship
+    skills: Optional[str] = Field(default=None)  # TEXT field for skills
+    min_experience: Optional[int] = Field(default=None)
+    company_id: int = Field(foreign_key="companies.id", index=True)
+    employee_id: int = Field(foreign_key="employees.id", index=True)
     is_active: bool = Field(default=True, index=True)
-    views: int = Field(default=0)
-    applications_count: int = Field(default=0)
-    posted_by: int = Field(foreign_key="users.id", index=True)  # user_id of the employee who posted
+    job_link: Optional[str] = Field(default=None, max_length=500)
 
 
 class ReferralStatus(str, Enum):
