@@ -57,7 +57,6 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [userProfile, setUserProfile] = useState<any>(null)
   const [jobseekerProfile, setJobseekerProfile] = useState<any>(null)
 
   // Pre-populate form with user data
@@ -68,7 +67,6 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
           // Fetch basic profile
           const profileResponse = await profileAPI.getProfile();
           const profileData: any = profileResponse.data;
-          setUserProfile(profileData);
 
           // Fetch jobseeker profile if available
           try {
@@ -109,7 +107,7 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
     };
 
     fetchUserData();
-  }, [user, isOpen])
+  }, [user, isOpen, jobseekerProfile?.linkedin_url, jobseekerProfile?.resume_filename])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
