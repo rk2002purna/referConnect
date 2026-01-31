@@ -18,8 +18,7 @@ import {
   saveCompletedSteps,
   loadCompletedSteps,
   saveOnboardingDataToAPI,
-  loadOnboardingDataFromAPI,
-  clearOnboardingData
+  loadOnboardingDataFromAPI
 } from '../../lib/onboardingPersistence'
 
 interface OnboardingWizardProps {
@@ -57,8 +56,42 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
   useEffect(() => {
     const initializeOnboarding = async () => {
       if (user) {
-        // Load from localStorage first
+        // Check if this is a new user (compare email with stored data)
         const localData = loadOnboardingData()
+        const localEmail = localData?.email
+        
+        // If local data exists but is for a different user, clear it
+        if (localData && localEmail && localEmail !== user.email) {
+          console.log('Different user detected, clearing old onboarding data')
+          // Clear localStorage for previous user
+          localStorage.removeItem('onboarding_data')
+          localStorage.removeItem('onboarding_current_step')
+          localStorage.removeItem('onboarding_completed_steps')
+          
+          // Reset local variables
+          const freshData = {
+            first_name: user.first_name || '',
+            last_name: user.last_name || '',
+            email: user.email || '',
+            jobseeker: {
+              skills: [],
+              preferred_job_types: [],
+              industries: [],
+              languages: [],
+              certifications: [],
+              privacy_excluded_companies: []
+            },
+            ...initialData
+          }
+          
+          setData(freshData)
+          setCompletedSteps([])
+          setCurrentStepIndex(0)
+          saveOnboardingData(freshData)
+          return
+        }
+        
+        // Load from localStorage if same user
         const localStep = loadCurrentStep()
         const localCompletedSteps = loadCompletedSteps()
         
@@ -77,20 +110,20 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
           ...initialData
         }
         
-        // If we have local data, merge it with user data
-        if (localData) {
+        // If we have local data for this user, merge it
+        if (localData && localEmail === user.email) {
           finalData = { ...finalData, ...localData }
-        }
-        
-        // Load from API if localStorage data is empty or incomplete
-        if (!localData) {
+          console.log('Loading existing data for user:', user.email)
+        } else {
+          // Load from API if no local data exists
           try {
             const apiData = await loadOnboardingDataFromAPI(user.role as 'jobseeker' | 'employee')
             if (apiData) {
               finalData = { ...finalData, ...apiData }
+              console.log('Loaded data from API for user:', user.email)
             }
           } catch (error) {
-            console.log('Failed to load from API, using local data')
+            console.log('No existing data found for user:', user.email)
           }
         }
         
@@ -100,6 +133,7 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
         
         // Save initial data to localStorage
         saveOnboardingData(finalData)
+        console.log('Initialized onboarding data for:', user.email)
       }
     }
     
@@ -336,6 +370,12 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
         localStorage.setItem('onboarding_completed_role', user?.role || '')
         console.log('✓ Onboarding marked as completed in localStorage')
         
+        // Clear onboarding data from localStorage
+        localStorage.removeItem('onboarding_data')
+        localStorage.removeItem('onboarding_current_step')
+        localStorage.removeItem('onboarding_completed_steps')
+        console.log('✓ Onboarding data cleared from localStorage')
+        
         // Update local state
         updateData({
           verification: {
@@ -563,6 +603,12 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
       // Add a small delay to ensure completion status is updated
       await new Promise(resolve => setTimeout(resolve, 500))
       
+      // Clear onboarding data from localStorage
+      localStorage.removeItem('onboarding_data')
+      localStorage.removeItem('onboarding_current_step')
+      localStorage.removeItem('onboarding_completed_steps')
+      console.log('Onboarding data cleared from localStorage')
+      
       // Redirect based on role
       if (user?.role === 'jobseeker') {
         navigate('/search')
@@ -579,6 +625,11 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
 
   const handleExit = () => {
     if (window.confirm('Are you sure you want to exit onboarding? You can complete it later from your profile.')) {
+      // Clear onboarding data when exiting
+      localStorage.removeItem('onboarding_data')
+      localStorage.removeItem('onboarding_current_step')
+      localStorage.removeItem('onboarding_completed_steps')
+      console.log('Onboarding data cleared on exit')
       navigate('/profile')
     }
   }

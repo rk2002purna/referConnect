@@ -452,6 +452,8 @@ class ProfileService:
         # Determine if onboarding is complete
         # For employees: complete if they have basic required fields + employee profile + verification
         # For jobseekers: complete if they have basic required fields + mandatory jobseeker fields (resume + experience)
+        is_complete = False  # Default to False
+        
         if user.role.value == 'employee':
             employee_exists = self.db.exec(select(Employee).where(Employee.user_id == user_id)).scalar_one_or_none() is not None
             
@@ -469,7 +471,7 @@ class ProfileService:
                 # Don't auto-verify based on email domain - require actual verification process
                 is_verified = False
             
-            is_complete = (basic_required_completed == len(basic_required) and employee_exists and is_verified)
+            is_complete = bool(basic_required_completed == len(basic_required) and employee_exists and is_verified)
         else:
             # For jobseekers, check if they have mandatory fields: resume and years_experience
             jobseeker_result = self.db.exec(select(JobSeeker).where(JobSeeker.user_id == user_id))
@@ -481,9 +483,12 @@ class ProfileService:
                 user_resume = user.resume_filename is not None and user.resume_filename != ''
                 has_resume = jobseeker_resume or user_resume
                 has_experience = jobseeker.years_experience is not None and jobseeker.years_experience != ''
-                is_complete = (basic_required_completed == len(basic_required) and has_resume and has_experience)
+                is_complete = bool(basic_required_completed == len(basic_required) and has_resume and has_experience)
             else:
                 is_complete = False
+        
+        # Ensure is_complete is always a boolean (shouldn't be needed, but just in case)
+        is_complete = bool(is_complete)
 
         return ProfileCompletionResponse(
             basic_info_completion=basic_completion,

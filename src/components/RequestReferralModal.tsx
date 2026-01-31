@@ -16,6 +16,7 @@ import {
   CheckCircle,
   Loader2
 } from 'lucide-react'
+import { profileAPI } from '../lib/api'
 
 interface Job {
   id: number
@@ -51,21 +52,63 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
     priority: 'normal'
   })
   const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const [savedResumeFilename, setSavedResumeFilename] = useState<string>('')
+  const [showSavedResume, setShowSavedResume] = useState<boolean>(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [userProfile, setUserProfile] = useState<any>(null)
+  const [jobseekerProfile, setJobseekerProfile] = useState<any>(null)
 
   // Pre-populate form with user data
   useEffect(() => {
-    if (user && isOpen) {
-      setFormData(prev => ({
-        ...prev,
-        jobseeker_name: user.first_name ? `${user.first_name} ${user.last_name}` : '',
-        jobseeker_email: user.email || '',
-        jobseeker_phone: '',
-        linkedin_url: ''
-      }))
-    }
+    const fetchUserData = async () => {
+      if (user && isOpen) {
+        try {
+          // Fetch basic profile
+          const profileResponse = await profileAPI.getProfile();
+          const profileData: any = profileResponse.data;
+          setUserProfile(profileData);
+
+          // Fetch jobseeker profile if available
+          try {
+            const jobseekerResponse = await profileAPI.getJobSeekerProfile();
+            const jobseekerData: any = jobseekerResponse.data;
+            setJobseekerProfile(jobseekerData);
+          } catch (error) {
+            console.log('No jobseeker profile found');
+          }
+
+          // Set form data with user information
+          setFormData(prev => ({
+            ...prev,
+            jobseeker_name: user.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : '',
+            jobseeker_email: user.email || '',
+            jobseeker_phone: profileData.phone || '',
+            linkedin_url: profileData.linkedin_url || jobseekerProfile?.linkedin_url || ''
+          }));
+          
+          // Set saved resume filename if available
+          if (profileData.resume_filename) {
+            setSavedResumeFilename(profileData.resume_filename);
+            setShowSavedResume(true);
+          } else if (jobseekerProfile?.resume_filename) {
+            setSavedResumeFilename(jobseekerProfile.resume_filename);
+            setShowSavedResume(true);
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+          // Fallback to basic user data
+          setFormData(prev => ({
+            ...prev,
+            jobseeker_name: user.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : '',
+            jobseeker_email: user.email || '',
+          }));
+        }
+      }
+    };
+
+    fetchUserData();
   }, [user, isOpen])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -112,6 +155,11 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
       // Validate required fields
       if (!formData.jobseeker_name || !formData.jobseeker_email) {
         throw new Error('Name and email are required')
+      }
+      
+      // Resume is required (must be uploaded)
+      if (!resumeFile) {
+        throw new Error('Resume is required')
       }
 
       // Create FormData for multipart upload
@@ -216,6 +264,7 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
                         placeholder="Your full name"
                         className="pl-10"
                         required
+                        readOnly
                       />
                     </div>
                   </div>
@@ -234,6 +283,7 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
                         placeholder="your@email.com"
                         className="pl-10"
                         required
+                        readOnly
                       />
                     </div>
                   </div>
@@ -278,9 +328,9 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
                 {/* Resume Upload */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Resume (Optional)
+                    Resume *
                   </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                  <div className={`border-2 border-dashed rounded-lg p-4 ${resumeFile ? 'border-green-300 bg-green-50' : showSavedResume ? 'border-blue-300 bg-blue-50' : 'border-red-300 bg-red-50'}`}>
                     <input
                       type="file"
                       id="resume"
@@ -300,10 +350,18 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
                             ({(resumeFile.size / 1024 / 1024).toFixed(2)} MB)
                           </span>
                         </div>
+                      ) : showSavedResume ? (
+                        <div className="flex items-center space-x-2 text-blue-600">
+                          <File className="w-5 h-5" />
+                          <span className="text-sm font-medium">Using saved resume: {savedResumeFilename}</span>
+                          <span className="text-xs text-gray-500">
+                            Click to upload different resume
+                          </span>
+                        </div>
                       ) : (
                         <div className="flex flex-col items-center space-y-2">
-                          <Upload className="w-8 h-8 text-gray-400" />
-                          <span className="text-sm text-gray-600">
+                          <Upload className="w-8 h-8 text-red-400" />
+                          <span className="text-sm text-red-600 font-medium">
                             Click to upload or drag and drop
                           </span>
                           <span className="text-xs text-gray-500">
@@ -313,6 +371,12 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
                       )}
                     </label>
                   </div>
+                  {!resumeFile && !showSavedResume && (
+                    <p className="mt-1 text-sm text-red-600">Resume is required to submit the referral request</p>
+                  )}
+                  {showSavedResume && !resumeFile && (
+                    <p className="mt-1 text-sm text-blue-600">Using your saved resume. Click upload area to use a different resume.</p>
+                  )}
                 </div>
 
                 {/* Priority */}

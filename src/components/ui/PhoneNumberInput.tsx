@@ -34,16 +34,16 @@ export default function PhoneNumberInput({
     if (value !== undefined) {
       setPhoneNumber(value || '')
     }
-  }, [])
+  }, [value])
 
   // Sync internal state with external value prop
   useEffect(() => {
     console.log('PhoneNumberInput: value prop changed', { value, phoneNumber });
-    // Always update internal state when prop changes, but avoid infinite loops
+    // Always update internal state when prop changes
     if (value !== undefined && value !== phoneNumber) {
       setPhoneNumber(value || '')
     }
-  }, [value])
+  }, [value, phoneNumber])
   const [validationResult, setValidationResult] = useState<PhoneValidationResult | null>(null)
 
   // Update selected country when countryCode prop changes
