@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import { Card, CardContent } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
-import { Upload, Camera, FileImage, X, CheckCircle, AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Upload, Camera, FileImage, X, CheckCircle, AlertCircle, ArrowLeft, ArrowRight, Save } from 'lucide-react'
 
 interface IDCardUploadStepProps {
   onUploadComplete: (files: { selfie: File; idCard: File }) => void
@@ -285,8 +285,9 @@ export function IDCardUploadStep({ onUploadComplete, onPrevious, onNext }: IDCar
               Uploading...
             </>
           ) : (
-            <>
-              Submit for Review
+<>
+              <Save className="w-4 h-4 mr-2" />
+              Save and Continue
               <ArrowRight className="w-4 h-4 ml-2" />
             </>
           )}

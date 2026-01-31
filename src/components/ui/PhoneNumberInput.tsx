@@ -27,7 +27,23 @@ export default function PhoneNumberInput({
   const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
     COUNTRY_CODES.find(cc => cc.code === countryCode) || COUNTRY_CODES[0]
   )
-  const [phoneNumber, setPhoneNumber] = useState(value)
+  const [phoneNumber, setPhoneNumber] = useState(value || '')
+
+  // Initialize with proper value on mount
+  useEffect(() => {
+    if (value !== undefined) {
+      setPhoneNumber(value || '')
+    }
+  }, [])
+
+  // Sync internal state with external value prop
+  useEffect(() => {
+    console.log('PhoneNumberInput: value prop changed', { value, phoneNumber });
+    // Always update internal state when prop changes, but avoid infinite loops
+    if (value !== undefined && value !== phoneNumber) {
+      setPhoneNumber(value || '')
+    }
+  }, [value])
   const [validationResult, setValidationResult] = useState<PhoneValidationResult | null>(null)
 
   // Update selected country when countryCode prop changes
@@ -57,9 +73,9 @@ export default function PhoneNumberInput({
   }
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/[^\d]/g, '') // Only allow digits
-    setPhoneNumber(value)
-    onChange(value, selectedCountry.code)
+    const newValue = e.target.value.replace(/[^\d]/g, '') // Only allow digits
+    setPhoneNumber(newValue)
+    onChange(newValue, selectedCountry.code)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

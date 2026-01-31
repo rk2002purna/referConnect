@@ -5,11 +5,22 @@ import { useProfileCompletion } from '../../contexts/ProfileCompletionContext'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { Progress } from '../ui/Progress'
-import { CheckCircle, ArrowLeft, ArrowRight, X } from 'lucide-react'
+import { CheckCircle, ArrowLeft, ArrowRight, X, Save } from 'lucide-react'
 import { OnboardingData, JOB_SEEKER_STEPS, EMPLOYEE_STEPS } from '../../types/onboarding'
 import { profileAPI, verificationAPI } from '../../lib/api'
 import ResumeUploadStep from './ResumeUploadStep'
 import { VerificationSuccessModal } from '../verification/VerificationSuccessModal'
+import { 
+  saveOnboardingData, 
+  loadOnboardingData, 
+  saveCurrentStep, 
+  loadCurrentStep,
+  saveCompletedSteps,
+  loadCompletedSteps,
+  saveOnboardingDataToAPI,
+  loadOnboardingDataFromAPI,
+  clearOnboardingData
+} from '../../lib/onboardingPersistence'
 
 interface OnboardingWizardProps {
   initialData?: Partial<OnboardingData>
@@ -34,23 +45,66 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
     },
     ...initialData
   })
+  const [completedSteps, setCompletedSteps] = useState<string[]>(loadCompletedSteps())
+  const [isSaving, setIsSaving] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showVerificationSuccess, setShowVerificationSuccess] = useState(false)
   const redirectTimerRef = React.useRef<NodeJS.Timeout | null>(null)
 
 
-  // Update data when user data changes
+  // Initialize onboarding data and step
   useEffect(() => {
-    if (user) {
-      setData(prev => ({
-        ...prev,
-        first_name: user.first_name || prev.first_name,
-        last_name: user.last_name || prev.last_name,
-        email: user.email || prev.email
-      }))
+    const initializeOnboarding = async () => {
+      if (user) {
+        // Load from localStorage first
+        const localData = loadOnboardingData()
+        const localStep = loadCurrentStep()
+        const localCompletedSteps = loadCompletedSteps()
+        
+        let finalData = {
+          first_name: user.first_name || '',
+          last_name: user.last_name || '',
+          email: user.email || '',
+          jobseeker: {
+            skills: [],
+            preferred_job_types: [],
+            industries: [],
+            languages: [],
+            certifications: [],
+            privacy_excluded_companies: []
+          },
+          ...initialData
+        }
+        
+        // If we have local data, merge it with user data
+        if (localData) {
+          finalData = { ...finalData, ...localData }
+        }
+        
+        // Load from API if localStorage data is empty or incomplete
+        if (!localData) {
+          try {
+            const apiData = await loadOnboardingDataFromAPI(user.role as 'jobseeker' | 'employee')
+            if (apiData) {
+              finalData = { ...finalData, ...apiData }
+            }
+          } catch (error) {
+            console.log('Failed to load from API, using local data')
+          }
+        }
+        
+        setData(finalData)
+        setCompletedSteps(localCompletedSteps)
+        setCurrentStepIndex(localStep)
+        
+        // Save initial data to localStorage
+        saveOnboardingData(finalData)
+      }
     }
-  }, [user])
+    
+    initializeOnboarding()
+  }, [user, initialData])
 
   // Get steps based on role and verification method
   const getSteps = () => {
@@ -119,6 +173,9 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
         ...updates
       }
       console.log('New onboarding data:', newData)
+      
+      // Save to localStorage immediately
+      saveOnboardingData(newData)
       return newData
     })
     setErrors([])
@@ -132,12 +189,52 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
     return stepErrors.length === 0
   }
 
-  const handleNext = () => {
-    if (validateCurrentStep()) {
-      if (currentStepIndex < steps.length - 1) {
-        setCurrentStepIndex(prev => prev + 1)
+  const saveCurrentStepData = async (): Promise<boolean> => {
+    if (!user) return false
+    
+    setIsSaving(true)
+    try {
+      // Save to localStorage
+      saveOnboardingData(data)
+      saveCurrentStep(currentStepIndex)
+      
+      // Add current step to completed steps
+      const updatedCompletedSteps = [...completedSteps, currentStep.id]
+      const uniqueCompletedSteps = Array.from(new Set(updatedCompletedSteps))
+      setCompletedSteps(uniqueCompletedSteps)
+      saveCompletedSteps(uniqueCompletedSteps)
+      
+      // Save to API
+      const success = await saveOnboardingDataToAPI(data, user.role as 'jobseeker' | 'employee')
+      
+      if (success) {
+        console.log(`Step ${currentStep.id} data saved successfully`)
       } else {
-        handleComplete()
+        console.warn(`Step ${currentStep.id} data saved to localStorage but failed to save to API`)
+      }
+      
+      return true
+    } catch (error) {
+      console.error('Failed to save step data:', error)
+      return false
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleNext = async () => {
+    if (validateCurrentStep()) {
+      // Save current step data before moving to next step
+      const saveSuccess = await saveCurrentStepData()
+      
+      if (saveSuccess) {
+        if (currentStepIndex < steps.length - 1) {
+          setCurrentStepIndex(prev => prev + 1)
+        } else {
+          handleComplete()
+        }
+      } else {
+        setErrors(['Failed to save data. Please try again.'])
       }
     }
   }
@@ -334,12 +431,19 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
 
   const handlePrevious = () => {
     if (currentStepIndex > 0) {
+      // Save current data before going back
+      saveOnboardingData(data)
+      saveCurrentStep(currentStepIndex)
+      
       setCurrentStepIndex(prev => prev - 1)
       setErrors([])
     }
   }
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    // Save current step data before skipping
+    await saveCurrentStepData()
+    
     if (currentStepIndex < steps.length - 1) {
       setCurrentStepIndex(prev => prev + 1)
     } else {
@@ -628,16 +732,19 @@ export function OnboardingWizard({ initialData }: OnboardingWizardProps) {
                   
                   <Button
                     onClick={handleNext}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isSaving}
                     className="flex items-center"
                   >
                     {isSubmitting ? (
+                      'Completing...'
+                    ) : isSaving ? (
                       'Saving...'
                     ) : currentStepIndex === steps.length - 1 ? (
                       'Complete Setup'
                     ) : (
                       <>
-                        Next
+                        <Save className="w-4 h-4 mr-2" />
+                        Save and Continue
                         <ArrowRight className="w-4 h-4 ml-2" />
                       </>
                     )}

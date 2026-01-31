@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Card, CardContent } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { ArrowLeft, ArrowRight, Mail, Building2, CheckCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Mail, Building2, CheckCircle, Save } from 'lucide-react'
 
 interface CompanyEmailStepProps {
   companyName: string
@@ -175,7 +175,8 @@ export function CompanyEmailStep({
                   </>
                 ) : (
                   <>
-                    Send Verification Code
+                    <Save className="w-4 h-4 mr-2" />
+                    Save and Continue
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </>
                 )}

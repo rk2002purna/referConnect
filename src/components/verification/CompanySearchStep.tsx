@@ -3,7 +3,7 @@ import { Card, CardContent } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Badge } from '../ui/Badge'
-import { Search, Building2, CheckCircle, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react'
+import { Search, Building2, CheckCircle, ArrowLeft, ArrowRight, Loader2, Save } from 'lucide-react'
 import { verificationAPI } from '../../lib/api'
 
 interface Company {
@@ -263,7 +263,8 @@ export function CompanySearchStep({ onCompanySelect, onPrevious, onNext }: Compa
           disabled={!selectedCompany}
           className="flex items-center"
         >
-          Continue
+          <Save className="w-4 h-4 mr-2" />
+          Save and Continue
           <ArrowRight className="w-4 h-4 ml-2" />
         </Button>
       </div>

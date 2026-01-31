@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import PhoneNumberInput from '../ui/PhoneNumberInput'
@@ -7,12 +7,19 @@ import { User, Mail, MapPin, FileText } from 'lucide-react'
 
 export default function BasicInfoStep({ data, updateData }: OnboardingStepProps) {
   const [phoneValidation, setPhoneValidation] = useState<{isValid: boolean, error?: string}>({isValid: true})
+
+  // Log data changes for debugging
+  useEffect(() => {
+    console.log('BasicInfoStep data updated:', data);
+    console.log('Phone data:', { phone: data.phone, countryCode: data.phone_country_code });
+  }, [data]);
   
   const handleInputChange = (field: string, value: string) => {
     updateData({ [field]: value })
   }
 
   const handlePhoneChange = (phoneNumber: string, countryCode: string) => {
+    console.log('Phone number changed:', { phoneNumber, countryCode });
     // Store both phone number and country code
     updateData({ 
       phone: phoneNumber,
