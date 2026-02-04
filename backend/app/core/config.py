@@ -1,7 +1,7 @@
 from functools import lru_cache
-from typing import List
+from typing import List, Optional
 
-from pydantic import AnyUrl, Field
+from pydantic import AnyUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,7 +28,17 @@ class Settings(BaseSettings):
         "https://referconnect.vercel.app",
         "https://*.vercel.app"
     ])
+    CORS_ALLOWED_ORIGIN_REGEX: Optional[str] = Field(default=None)
     ALLOWED_ORIGINS: str = Field(default="*")
+
+    @field_validator("CORS_ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # Email / Providers
     SENDGRID_API_KEY: str = Field(default="")
@@ -62,5 +72,4 @@ def get_settings() -> "Settings":
 
 
 settings = get_settings()
-
 
