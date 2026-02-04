@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent } from '../components/ui/Card'
@@ -68,23 +68,7 @@ export function MyReferrals() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [timeTick, setTimeTick] = useState(0)
 
-  useEffect(() => {
-    loadReferrals()
-  }, [filter])
-
-  useEffect(() => {
-    const requestId = searchParams.get('request')
-    if (requestId) {
-      openReferralDetail(parseInt(requestId, 10))
-    }
-  }, [searchParams])
-
-  useEffect(() => {
-    const timer = setInterval(() => setTimeTick(prev => prev + 1), 60000)
-    return () => clearInterval(timer)
-  }, [])
-
-  const loadReferrals = async () => {
+  const loadReferrals = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -118,7 +102,23 @@ export function MyReferrals() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    loadReferrals()
+  }, [loadReferrals])
+
+  useEffect(() => {
+    const requestId = searchParams.get('request')
+    if (requestId) {
+      openReferralDetail(parseInt(requestId, 10))
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    const timer = setInterval(() => setTimeTick(prev => prev + 1), 60000)
+    return () => clearInterval(timer)
+  }, [])
 
   const openReferralDetail = async (referralId: number) => {
     try {

@@ -102,7 +102,6 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
             : (jobseekerData?.resume_filename ? jobseekerData : null)
 
           if (resumeSource?.resume_filename) {
-            const apiBaseUrl = getApiBaseUrl()
             const derivedUrl = resumeSource.resume_url || ''
 
             console.log('✅ Using resume:');

@@ -7,7 +7,6 @@ import {
   ArrowLeft, 
   Users, 
   Calendar,
-  MapPin,
   Briefcase,
   FileText,
   Download,

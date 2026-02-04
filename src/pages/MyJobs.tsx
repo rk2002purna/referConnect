@@ -18,7 +18,6 @@ import {
   AlertCircle,
   Filter,
   Search,
-  MoreVertical,
   Trash2
 } from 'lucide-react'
 
