@@ -18,7 +18,8 @@ import {
   EmployeeProfileUpdateData,
   ExperienceData,
   EducationData,
-  CertificationData
+  CertificationData,
+  getApiBaseUrl
 } from '../lib/api'
 import { 
   User, 
@@ -49,11 +50,6 @@ export function Profile() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { refreshCompletionStatus } = useProfileCompletion()
 
-  // Helper function to get API base URL
-  const getApiBaseUrl = () => {
-    return process.env.REACT_APP_API_URL || 
-           (window.location.hostname === 'localhost' ? 'http://localhost:8000/api/v1' : 'https://referconnect.onrender.com/api/v1')
-  }
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -306,7 +302,7 @@ export function Profile() {
       console.log('Current token:', localStorage.getItem('access_token'))
       
       // Test the API call directly
-      const response = await fetch('http://localhost:8000/api/v1/profile/me/completion', {
+      const response = await fetch(`${getApiBaseUrl()}/profile/me/completion`, {
         headers: {
           'Authorization': 'Bearer ' + localStorage.getItem('access_token'),
           'Content-Type': 'application/json'
@@ -1214,17 +1210,6 @@ export function Profile() {
                         </p>
                         <div className="space-y-2">
                           <div className="flex gap-2 justify-center">
-                            {(jobseekerProfile.resume_url || jobseekerProfile.resume_key) && (
-                              <Button 
-                                variant="outline"
-                                className="border-green-300 text-green-600 hover:bg-green-50 flex items-center gap-2"
-                                onClick={() => setShowResumeViewer(true)}
-                                disabled={uploadingResume}
-                              >
-                                <Eye className="w-4 h-4" />
-                                View Resume
-                              </Button>
-                            )}
                             <input
                               type="file"
                               id="resume-upload"
@@ -1244,14 +1229,6 @@ export function Profile() {
                                 </span>
                               </Button>
                             </label>
-                            <Button 
-                              variant="outline"
-                              className="border-red-300 text-red-600 hover:bg-red-50"
-                              onClick={handleResumeDelete}
-                              disabled={uploadingResume}
-                            >
-                              Delete Resume
-                            </Button>
                           </div>
                         </div>
                       </div>

@@ -1,24 +1,25 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
-from fastapi.responses import FileResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.responses import FileResponse, RedirectResponse
+from sqlmodel import Session, select
 import os
 
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
-from app.models.user import User
+from app.models.user import User, Job, Company
 from app.schemas.referral_request import (
     ReferralRequestCreate, ReferralRequestUpdate, ReferralRequestResponse,
     ReferralRequestList, ReferralRequestDetail, ReferralRequestStats,
     ReferralRequestStatus, ReferralRequestPriority
 )
 from app.services.referral_request_service import ReferralRequestService
+from app.services.s3_service import S3FileService
 
 router = APIRouter()
 
 
 @router.post("/", response_model=ReferralRequestResponse, summary="Create a referral request")
-async def create_referral_request(
+def create_referral_request(
     job_id: int = Form(...),
     jobseeker_name: str = Form(..., min_length=1, max_length=200),
     jobseeker_email: str = Form(...),
@@ -27,8 +28,11 @@ async def create_referral_request(
     personal_note: Optional[str] = Form(None),
     priority: ReferralRequestPriority = Form(ReferralRequestPriority.normal),
     resume: Optional[UploadFile] = File(None),
+    resume_filename: Optional[str] = Form(None),
+    resume_key: Optional[str] = Form(None),
+    resume_url: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: Session = Depends(get_db_session)
 ):
     """Create a new referral request with optional resume upload"""
     
@@ -69,89 +73,130 @@ async def create_referral_request(
     resume_mime_type = None
     
     if resume:
-        resume_file = await resume.read()
+        resume_file = resume.file.read()
         resume_filename = resume.filename
         resume_mime_type = resume.content_type
     
     # Create referral request
     service = ReferralRequestService(db)
     try:
-        referral_request = await service.create_referral_request(
+        referral_request = service.create_referral_request(
             request_data=request_data,
             jobseeker_id=current_user.id,
             resume_file=resume_file,
             resume_filename=resume_filename,
-            resume_mime_type=resume_mime_type
+            resume_mime_type=resume_mime_type,
+            resume_key=resume_key,
+            resume_url=resume_url
         )
         
         return referral_request
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to create referral request")
+        raise HTTPException(status_code=500, detail=f"Failed to create referral request: {str(e)}")
 
 
 @router.get("/", response_model=List[ReferralRequestList], summary="Get referral requests")
-async def get_referral_requests(
+def get_referral_requests(
     status: Optional[str] = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: Session = Depends(get_db_session)
 ):
     """Get referral requests for the current user"""
     
     service = ReferralRequestService(db)
     
     if current_user.role == "employee":
-        requests = await service.get_referral_requests_for_employee(
+        requests = service.get_referral_requests_for_employee(
             employee_id=current_user.id,
             status=status,
             limit=limit,
             offset=offset
         )
     else:
-        requests = await service.get_referral_requests_for_jobseeker(
+        requests = service.get_referral_requests_for_jobseeker(
             jobseeker_id=current_user.id,
             limit=limit,
             offset=offset
         )
-    
-    return requests
+
+    job_ids = [r.job_id for r in requests]
+    jobs_result = db.execute(select(Job).where(Job.id.in_(job_ids))) if job_ids else None
+    jobs = jobs_result.scalars().all() if jobs_result else []
+    jobs_by_id = {j.id: j for j in jobs}
+
+    company_ids = [j.company_id for j in jobs if j.company_id]
+    companies_result = db.execute(select(Company).where(Company.id.in_(company_ids))) if company_ids else None
+    companies = companies_result.scalars().all() if companies_result else []
+    companies_by_id = {c.id: c for c in companies}
+
+    formatted = []
+    for r in requests:
+        job = jobs_by_id.get(r.job_id)
+        company = companies_by_id.get(job.company_id) if job else None
+        formatted.append({
+            "id": r.id,
+            "job_id": r.job_id,
+            "job_title": job.title if job else "Unknown",
+            "company_name": company.name if company else "Unknown",
+            "jobseeker_name": r.jobseeker_name,
+            "jobseeker_email": r.jobseeker_email,
+            "status": r.status,
+            "priority": r.priority,
+            "created_at": r.created_at,
+            "viewed_by_employee": r.viewed_by_employee,
+            "resume_filename": r.resume_filename,
+            "personal_note": r.personal_note
+        })
+
+    return formatted
 
 
 @router.get("/{request_id}", response_model=ReferralRequestDetail, summary="Get referral request details")
-async def get_referral_request(
+def get_referral_request(
     request_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: Session = Depends(get_db_session)
 ):
     """Get detailed information about a specific referral request"""
     
     service = ReferralRequestService(db)
-    request = await service.get_referral_request_by_id(request_id, current_user.id)
+    request = service.get_referral_request_by_id(request_id, current_user.id)
     
     if not request:
         raise HTTPException(status_code=404, detail="Referral request not found")
     
     # Mark as viewed if user is the employee
     if current_user.role == "employee" and request.employee_id == current_user.id:
-        await service.mark_as_viewed(request_id, current_user.id)
-    
-    return request
+        service.mark_as_viewed(request_id, current_user.id)
+
+    job = db.execute(select(Job).where(Job.id == request.job_id)).scalar_one_or_none()
+    company = db.execute(select(Company).where(Company.id == job.company_id)).scalar_one_or_none() if job else None
+    employee_user = db.execute(select(User).where(User.id == request.employee_id)).scalar_one_or_none()
+
+    return {
+        **request.model_dump(),
+        "job_title": job.title if job else "Unknown",
+        "company_name": company.name if company else "Unknown",
+        "employee_name": f"{employee_user.first_name or ''} {employee_user.last_name or ''}".strip() if employee_user else "Unknown",
+        "employee_email": employee_user.email if employee_user else "Unknown"
+    }
 
 
 @router.put("/{request_id}", response_model=ReferralRequestResponse, summary="Update referral request")
-async def update_referral_request(
+def update_referral_request(
     request_id: int,
     update_data: ReferralRequestUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: Session = Depends(get_db_session)
 ):
     """Update a referral request (employee can respond, job seeker can withdraw)"""
     
     service = ReferralRequestService(db)
-    updated_request = await service.update_referral_request(
+    updated_request = service.update_referral_request(
         request_id=request_id,
         user_id=current_user.id,
         update_data=update_data
@@ -164,14 +209,14 @@ async def update_referral_request(
 
 
 @router.get("/stats/overview", response_model=ReferralRequestStats, summary="Get referral request statistics")
-async def get_referral_request_stats(
+def get_referral_request_stats(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: Session = Depends(get_db_session)
 ):
     """Get referral request statistics for the current user"""
     
     service = ReferralRequestService(db)
-    stats = await service.get_referral_request_stats(
+    stats = service.get_referral_request_stats(
         user_id=current_user.id,
         user_role=current_user.role
     )
@@ -180,9 +225,9 @@ async def get_referral_request_stats(
 
 
 @router.get("/notifications/pending", response_model=List[ReferralRequestList], summary="Get pending notifications")
-async def get_pending_notifications(
+def get_pending_notifications(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: Session = Depends(get_db_session)
 ):
     """Get pending referral request notifications (employee only)"""
     
@@ -190,16 +235,16 @@ async def get_pending_notifications(
         raise HTTPException(status_code=403, detail="Only employees can view pending notifications")
     
     service = ReferralRequestService(db)
-    notifications = await service.get_pending_notifications(current_user.id)
+    notifications = service.get_pending_notifications(current_user.id)
     
     return notifications
 
 
 @router.post("/{request_id}/mark-notification-sent", summary="Mark notification as sent")
-async def mark_notification_sent(
+def mark_notification_sent(
     request_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: Session = Depends(get_db_session)
 ):
     """Mark a notification as sent (employee only)"""
     
@@ -207,7 +252,7 @@ async def mark_notification_sent(
         raise HTTPException(status_code=403, detail="Only employees can mark notifications as sent")
     
     service = ReferralRequestService(db)
-    success = await service.mark_notification_sent(request_id)
+    success = service.mark_notification_sent(request_id)
     
     if not success:
         raise HTTPException(status_code=404, detail="Referral request not found")
@@ -216,26 +261,35 @@ async def mark_notification_sent(
 
 
 @router.get("/{request_id}/resume", summary="Download resume")
-async def download_resume(
+def download_resume(
     request_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: Session = Depends(get_db_session)
 ):
     """Download the resume file for a referral request"""
     
     service = ReferralRequestService(db)
-    file_path = await service.get_resume_file_path(request_id, current_user.id)
-    
-    if not file_path:
-        raise HTTPException(status_code=404, detail="Resume file not found or access denied")
-    
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Resume file not found on server")
-    
-    # Get the original filename
-    request = await service.get_referral_request_by_id(request_id, current_user.id)
+    request = service.get_referral_request_by_id(request_id, current_user.id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Referral request not found or access denied")
+
+    # If resume stored in metadata (S3), redirect to presigned URL
+    if request.request_metadata:
+        resume_key = request.request_metadata.get("resume_key")
+        resume_url = request.request_metadata.get("resume_url")
+        if resume_key:
+            s3_service = S3FileService()
+            download_url = s3_service.generate_presigned_url(resume_key)
+            return RedirectResponse(download_url)
+        if resume_url:
+            return RedirectResponse(resume_url)
+
+    # Otherwise use local file path
+    file_path = service.get_resume_file_path(request_id, current_user.id)
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Resume file not found")
+
     filename = request.resume_filename if request else "resume.pdf"
-    
     return FileResponse(
         path=file_path,
         filename=filename,
@@ -244,10 +298,10 @@ async def download_resume(
 
 
 @router.post("/{request_id}/withdraw", response_model=ReferralRequestResponse, summary="Withdraw referral request")
-async def withdraw_referral_request(
+def withdraw_referral_request(
     request_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: Session = Depends(get_db_session)
 ):
     """Withdraw a referral request (job seeker only)"""
     
@@ -255,7 +309,7 @@ async def withdraw_referral_request(
         raise HTTPException(status_code=403, detail="Only job seekers can withdraw referral requests")
     
     service = ReferralRequestService(db)
-    updated_request = await service.update_referral_request(
+    updated_request = service.update_referral_request(
         request_id=request_id,
         user_id=current_user.id,
         update_data=ReferralRequestUpdate(status=ReferralRequestStatus.withdrawn)

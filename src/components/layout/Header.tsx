@@ -37,7 +37,7 @@ export function Header() {
     if (user.role === 'employee') {
       return [
         { name: 'Post Job', href: '/post-job', icon: Plus },
-        { name: 'My Jobs', href: '/my-jobs', icon: Briefcase },
+        { name: 'Job Manager', href: '/my-jobs', icon: Briefcase },
         { name: 'My Referrals', href: '/referrals', icon: Users },
       ]
     }

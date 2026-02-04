@@ -92,7 +92,7 @@ export function Home() {
                 <Button asChild variant="outline" className="w-full justify-start">
                   <Link to="/my-jobs">
                     <Briefcase className="w-4 h-4 mr-2" />
-                    Manage My Jobs
+                    Job Manager
                   </Link>
                 </Button>
               )}

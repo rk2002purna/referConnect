@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlmodel import Session
+from sqlmodel import Session, select
 from typing import Optional, List
 
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
+from app.models.referral_request import ReferralRequest
 from app.models.user import User
 from app.schemas.profile import (
     ProfileUpdateRequest, JobSeekerProfileUpdateRequest, EmployeeProfileUpdateRequest,
     ProfileResponse, JobSeekerProfileResponse, EmployeeProfileResponse, ProfileCompletionResponse,
+    PublicJobSeekerProfileResponse,
     ExperienceCreate, ExperienceUpdate, ExperienceResponse,
     EducationCreate, EducationUpdate, EducationResponse,
     CertificationCreate, CertificationUpdate, CertificationResponse
@@ -54,6 +56,41 @@ def get_jobseeker_profile(
         raise HTTPException(status_code=404, detail="Jobseeker profile not found")
     
     return profile
+
+
+@router.get("/jobseeker/{user_id}", response_model=PublicJobSeekerProfileResponse)
+def get_jobseeker_profile_by_id(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    """Get a jobseeker profile by user id (employee access only)."""
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+    if role_value != 'employee':
+        raise HTTPException(status_code=403, detail="Access denied. Employees only.")
+
+    has_access = db.exec(
+        select(ReferralRequest.id).where(
+            ReferralRequest.jobseeker_id == user_id,
+            ReferralRequest.employee_id == current_user.id
+        )
+    ).first()
+
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    service = ProfileService(db)
+    try:
+        profile = service.get_profile(user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    jobseeker_profile = service.get_jobseeker_profile(user_id)
+
+    return PublicJobSeekerProfileResponse(
+        profile=profile,
+        jobseeker_profile=jobseeker_profile
+    )
 
 
 @router.put("/me/jobseeker", response_model=JobSeekerProfileResponse)

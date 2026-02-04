@@ -242,6 +242,11 @@ class JobSeekerProfileResponse(BaseModel):
     resume_key: Optional[str] = None
 
 
+class PublicJobSeekerProfileResponse(BaseModel):
+    profile: ProfileResponse
+    jobseeker_profile: Optional[JobSeekerProfileResponse] = None
+
+
 class LegacyEmployeeProfileResponse(BaseModel):
     user_id: int
     title: Optional[str] = None

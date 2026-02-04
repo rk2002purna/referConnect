@@ -1,6 +1,24 @@
 import axios from 'axios'
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:8000/api/v1' : 'https://referconnect.onrender.com/api/v1')
+export const getApiBaseUrl = () => {
+  const envUrl = process.env.REACT_APP_API_URL
+  if (envUrl) {
+    return envUrl.replace(/\/$/, '')
+  }
+
+  if (typeof window === 'undefined') {
+    return 'https://referconnect.onrender.com/api/v1'
+  }
+
+  const hostname = window.location.hostname
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return '/api/v1'
+  }
+
+  return 'https://referconnect.onrender.com/api/v1'
+}
+
+export const API_BASE_URL = getApiBaseUrl()
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -162,6 +180,13 @@ export const notificationAPI = {
   getStats: () => api.get('/notifications/stats/overview'),
 }
 
+// Referral Requests API
+export const referralRequestAPI = {
+  getReferrals: (params?: { status?: string; limit?: number; offset?: number }) =>
+    api.get('/referral-requests/', { params }),
+  getReferralById: (id: number) => api.get(`/referral-requests/${id}`),
+}
+
 // Analytics API
 export const analyticsAPI = {
   getDashboard: (params?: AnalyticsParams) => api.get('/analytics/dashboard', { params }),
@@ -191,6 +216,7 @@ export const profileAPI = {
   getProfile: () => api.get('/profile/me'),
   updateProfile: (data: ProfileUpdateData) => api.put('/profile/me', data),
   getJobSeekerProfile: () => api.get('/profile/me/jobseeker'),
+  getJobSeekerProfileById: (userId: number) => api.get(`/profile/jobseeker/${userId}`),
   updateJobSeekerProfile: (data: JobSeekerProfileUpdateData) => api.put('/profile/me/jobseeker', data),
   getEmployeeProfile: () => api.get('/profile/me/employee'),
   updateEmployeeProfile: (data: EmployeeProfileUpdateData) => api.put('/profile/me/employee', data),
@@ -792,6 +818,11 @@ export interface JobSeekerProfileResponse {
   github_url?: string
 }
 
+export interface PublicJobSeekerProfileResponse {
+  profile: ProfileResponse
+  jobseeker_profile?: JobSeekerProfileResponse | null
+}
+
 export interface EmployeeProfileResponse {
   user_id: number
   title?: string
@@ -1068,4 +1099,3 @@ export interface PendingVerification {
   submitted_at: string
   company_name?: string
 }
-

@@ -10,9 +10,12 @@ import { Onboarding } from './pages/Onboarding'
 import { JobSearch } from './pages/JobSearch'
 import { MyApplications } from './pages/MyApplications'
 import { MyReferrals } from './pages/MyReferrals'
+import { JobSeekerProfile } from './pages/JobSeekerProfile'
 import { Profile } from './pages/Profile'
 import { EmployeeProfile } from './pages/EmployeeProfile'
 import PostJob from './pages/PostJob'
+import { MyJobs } from './pages/MyJobs'
+import { JobApplications } from './pages/JobApplications'
 import { Notifications } from './pages/Notifications'
 import { Debug } from './pages/Debug'
 import TokenDebug from './pages/TokenDebug'
@@ -195,6 +198,14 @@ function App() {
                   } 
                 />
                 <Route 
+                  path="/jobseeker/:userId" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout><JobSeekerProfile /></Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
                   path="/notifications" 
                   element={
                     <ProtectedRoute>
@@ -223,6 +234,22 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Layout><PostJob /></Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/my-jobs" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout><MyJobs /></Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/jobs/:jobId/applications" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout><JobApplications /></Layout>
                     </ProtectedRoute>
                   } 
                 />

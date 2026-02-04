@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any
 from sqlmodel import select, and_, or_, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import Session
 from fastapi import HTTPException, status
 import json
 from datetime import datetime
@@ -14,10 +14,10 @@ from app.schemas.notification import (
 
 
 class NotificationService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: Session):
         self.db = db
 
-    async def create_notification(self, notification_data: NotificationCreate) -> NotificationResponse:
+    def create_notification(self, notification_data: NotificationCreate) -> NotificationResponse:
         """Create a new notification."""
         # Convert channels list to JSON string
         channels_json = json.dumps(notification_data.channels)
@@ -34,12 +34,12 @@ class NotificationService:
         )
 
         self.db.add(notification)
-        await self.db.commit()
-        await self.db.refresh(notification)
+        self.db.commit()
+        self.db.refresh(notification)
 
         return self._convert_to_response(notification)
 
-    async def get_notifications(
+    def get_notifications(
         self, 
         user_id: int, 
         skip: int = 0, 
@@ -58,7 +58,7 @@ class NotificationService:
         
         # Get total count
         count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
+        total_result = self.db.execute(count_query)
         total = total_result.scalar()
         
         # Get unread count
@@ -68,13 +68,13 @@ class NotificationService:
                 Notification.is_read == False
             )
         )
-        unread_result = await self.db.execute(unread_query)
+        unread_result = self.db.execute(unread_query)
         unread_count = unread_result.scalar()
         
         # Apply pagination and ordering
         query = query.order_by(Notification.created_at.desc()).offset(skip).limit(limit)
         
-        result = await self.db.execute(query)
+        result = self.db.execute(query)
         notifications = result.scalars().all()
         
         # Convert to response objects
@@ -91,9 +91,9 @@ class NotificationService:
             pages=pages
         )
 
-    async def mark_as_read(self, notification_id: int, user_id: int) -> NotificationResponse:
+    def mark_as_read(self, notification_id: int, user_id: int) -> NotificationResponse:
         """Mark a notification as read."""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(Notification).where(
                 and_(
                     Notification.id == notification_id,
@@ -113,14 +113,14 @@ class NotificationService:
         notification.read_at = datetime.utcnow()
         
         self.db.add(notification)
-        await self.db.commit()
-        await self.db.refresh(notification)
+        self.db.commit()
+        self.db.refresh(notification)
         
         return self._convert_to_response(notification)
 
-    async def mark_all_as_read(self, user_id: int) -> int:
+    def mark_all_as_read(self, user_id: int) -> int:
         """Mark all notifications as read for a user."""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(Notification).where(
                 and_(
                     Notification.recipient_id == user_id,
@@ -137,12 +137,12 @@ class NotificationService:
             self.db.add(notification)
             count += 1
         
-        await self.db.commit()
+        self.db.commit()
         return count
 
-    async def archive_notification(self, notification_id: int, user_id: int) -> NotificationResponse:
+    def archive_notification(self, notification_id: int, user_id: int) -> NotificationResponse:
         """Archive a notification."""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(Notification).where(
                 and_(
                     Notification.id == notification_id,
@@ -161,14 +161,14 @@ class NotificationService:
         notification.is_archived = True
         
         self.db.add(notification)
-        await self.db.commit()
-        await self.db.refresh(notification)
+        self.db.commit()
+        self.db.refresh(notification)
         
         return self._convert_to_response(notification)
 
-    async def get_notification_preferences(self, user_id: int) -> NotificationPreferencesSchema:
+    def get_notification_preferences(self, user_id: int) -> NotificationPreferencesSchema:
         """Get notification preferences for a user."""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(NotificationPreferences).where(NotificationPreferences.user_id == user_id)
         )
         preferences = result.scalar_one_or_none()
@@ -177,8 +177,8 @@ class NotificationService:
             # Create default preferences
             preferences = NotificationPreferences(user_id=user_id)
             self.db.add(preferences)
-            await self.db.commit()
-            await self.db.refresh(preferences)
+            self.db.commit()
+            self.db.refresh(preferences)
         
         return NotificationPreferencesSchema(
             user_id=preferences.user_id,
@@ -191,13 +191,13 @@ class NotificationService:
             system_notifications=preferences.system_notifications
         )
 
-    async def update_notification_preferences(
+    def update_notification_preferences(
         self, 
         user_id: int, 
         preferences_data: NotificationPreferencesSchema
     ) -> NotificationPreferencesSchema:
         """Update notification preferences for a user."""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(NotificationPreferences).where(NotificationPreferences.user_id == user_id)
         )
         preferences = result.scalar_one_or_none()
@@ -217,8 +217,8 @@ class NotificationService:
         preferences.updated_at = datetime.utcnow()
         
         self.db.add(preferences)
-        await self.db.commit()
-        await self.db.refresh(preferences)
+        self.db.commit()
+        self.db.refresh(preferences)
         
         return NotificationPreferencesSchema(
             user_id=preferences.user_id,
@@ -231,7 +231,7 @@ class NotificationService:
             system_notifications=preferences.system_notifications
         )
 
-    async def send_referral_notification(
+    def send_referral_notification(
         self, 
         recipient_id: int, 
         sender_id: int, 
@@ -250,9 +250,9 @@ class NotificationService:
             metadata={"referral_id": referral_id, "job_title": job_title}
         )
         
-        return await self.create_notification(notification_data)
+        return self.create_notification(notification_data)
 
-    async def send_referral_status_notification(
+    def send_referral_status_notification(
         self, 
         recipient_id: int, 
         sender_id: int, 
@@ -282,7 +282,7 @@ class NotificationService:
             metadata={"referral_id": referral_id, "job_title": job_title, "status": status}
         )
         
-        return await self.create_notification(notification_data)
+        return self.create_notification(notification_data)
 
     def _convert_to_response(self, notification: Notification) -> NotificationResponse:
         """Convert Notification model to NotificationResponse."""

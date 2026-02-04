@@ -1,11 +1,12 @@
 // AWS S3 Service for File Operations
 import { FileUploadResponse, FileInfo, validateFile } from './s3Config'
+import { getApiBaseUrl } from './api'
 
 export class S3FileService {
   private apiBaseUrl: string
 
   constructor() {
-    this.apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'
+    this.apiBaseUrl = getApiBaseUrl()
   }
 
   /**

@@ -38,7 +38,7 @@ class JobUpdate(BaseModel):
 class JobResponse(JobBase):
     id: int
     company_id: int
-    posted_by_employee_id: int
+    employee_id: int
     is_active: bool
     created_at: datetime
     updated_at: datetime

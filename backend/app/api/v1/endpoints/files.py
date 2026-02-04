@@ -114,7 +114,7 @@ async def delete_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
-@router.get("/download/{file_key}")
+@router.get("/download/{file_key:path}")
 async def get_download_url(
     file_key: str,
     current_user: User = Depends(get_current_user)

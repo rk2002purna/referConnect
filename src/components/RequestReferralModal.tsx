@@ -14,9 +14,11 @@ import {
   MessageSquare, 
   AlertCircle,
   CheckCircle,
-  Loader2
+  Loader2,
+  Eye
 } from 'lucide-react'
-import { profileAPI } from '../lib/api'
+import { getApiBaseUrl, profileAPI } from '../lib/api'
+import { ResumeViewer } from './ResumeViewer'
 
 interface Job {
   id: number
@@ -53,11 +55,14 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
   })
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [savedResumeFilename, setSavedResumeFilename] = useState<string>('')
+  const [savedResumeUrl, setSavedResumeUrl] = useState<string>('')
+  const [savedResumeKey, setSavedResumeKey] = useState<string>('')
   const [showSavedResume, setShowSavedResume] = useState<boolean>(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [jobseekerProfile, setJobseekerProfile] = useState<any>(null)
+  const [showResumeViewer, setShowResumeViewer] = useState<boolean>(false)
 
   // Pre-populate form with user data
   useEffect(() => {
@@ -69,9 +74,10 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
           const profileData: any = profileResponse.data;
 
           // Fetch jobseeker profile if available
+          let jobseekerData: any = null
           try {
             const jobseekerResponse = await profileAPI.getJobSeekerProfile();
-            const jobseekerData: any = jobseekerResponse.data;
+            jobseekerData = jobseekerResponse.data;
             setJobseekerProfile(jobseekerData);
           } catch (error) {
             console.log('No jobseeker profile found');
@@ -83,17 +89,36 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
             jobseeker_name: user.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : '',
             jobseeker_email: user.email || '',
             jobseeker_phone: profileData.phone || '',
-            linkedin_url: profileData.linkedin_url || jobseekerProfile?.linkedin_url || ''
+            linkedin_url: profileData.linkedin_url || jobseekerData?.linkedin_url || ''
           }));
           
-          // Set saved resume filename if available
-          if (profileData.resume_filename) {
-            setSavedResumeFilename(profileData.resume_filename);
+          // Set saved resume filename and URL if available
+          console.log('=== RESUME DETECTION ===');
+          console.log('Profile data:', profileData);
+          console.log('Jobseeker profile:', jobseekerData);
+          
+          const resumeSource = profileData.resume_filename 
+            ? profileData 
+            : (jobseekerData?.resume_filename ? jobseekerData : null)
+
+          if (resumeSource?.resume_filename) {
+            const apiBaseUrl = getApiBaseUrl()
+            const derivedUrl = resumeSource.resume_url || ''
+
+            console.log('✅ Using resume:');
+            console.log('   Filename:', resumeSource.resume_filename);
+            console.log('   URL:', resumeSource.resume_url);
+            console.log('   Key:', resumeSource.resume_key);
+            console.log('   Derived URL:', derivedUrl);
+
+            setSavedResumeFilename(resumeSource.resume_filename);
+            setSavedResumeUrl(derivedUrl);
+            setSavedResumeKey(resumeSource.resume_key || '');
             setShowSavedResume(true);
-          } else if (jobseekerProfile?.resume_filename) {
-            setSavedResumeFilename(jobseekerProfile.resume_filename);
-            setShowSavedResume(true);
+          } else {
+            console.log('❌ No saved resume found in either profile');
           }
+          console.log('=========================');
         } catch (error) {
           console.error('Error fetching user data:', error);
           // Fallback to basic user data
@@ -155,8 +180,8 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
         throw new Error('Name and email are required')
       }
       
-      // Resume is required (must be uploaded)
-      if (!resumeFile) {
+      // Resume is required (either uploaded or saved)
+      if (!resumeFile && !showSavedResume) {
         throw new Error('Resume is required')
       }
 
@@ -170,12 +195,23 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
       submitData.append('personal_note', formData.personal_note)
       submitData.append('priority', formData.priority)
       
+      // Handle resume submission
       if (resumeFile) {
+        // Use newly uploaded file
         submitData.append('resume', resumeFile)
+      } else if (showSavedResume) {
+        // Use saved resume metadata (faster than downloading+reuploading)
+        submitData.append('resume_filename', savedResumeFilename)
+        if (savedResumeKey) {
+          submitData.append('resume_key', savedResumeKey)
+        }
+        if (savedResumeUrl) {
+          submitData.append('resume_url', savedResumeUrl)
+        }
       }
 
       // Submit request
-      const response = await fetch('/api/v1/referral-requests', {
+      const response = await fetch(`${getApiBaseUrl()}/referral-requests`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
@@ -215,6 +251,7 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
       setResumeFile(null)
       setError(null)
       setSuccess(false)
+      setShowResumeViewer(false)
       onClose()
     }
   }
@@ -222,20 +259,21 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <Card className="border-0 shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-            <CardTitle className="text-xl font-semibold">Request Referral</CardTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleClose}
-              disabled={loading}
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </CardHeader>
+    <>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <Card className="border-0 shadow-none">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+              <CardTitle className="text-xl font-semibold">Request Referral</CardTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleClose}
+                disabled={loading}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </CardHeader>
           
           <CardContent>
 
@@ -373,7 +411,19 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
                     <p className="mt-1 text-sm text-red-600">Resume is required to submit the referral request</p>
                   )}
                   {showSavedResume && !resumeFile && (
-                    <p className="mt-1 text-sm text-blue-600">Using your saved resume. Click upload area to use a different resume.</p>
+                    <div className="mt-2 flex items-center space-x-2">
+                      <p className="text-sm text-blue-600 flex-1">Using your saved resume. Click upload area to use a different resume.</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowResumeViewer(true)}
+                        className="flex items-center space-x-1"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span>View Resume</span>
+                      </Button>
+                    </div>
                   )}
                 </div>
 
@@ -448,8 +498,17 @@ export function RequestReferralModal({ isOpen, onClose, job, onSuccess }: Reques
               </form>
             )}
           </CardContent>
-        </Card>
+          </Card>
+        </div>
       </div>
-    </div>
+      
+      {/* Resume Viewer Modal */}
+      <ResumeViewer
+        resumeUrl={savedResumeUrl}
+        resumeFilename={savedResumeFilename}
+        isOpen={showResumeViewer}
+        onClose={() => setShowResumeViewer(false)}
+      />
+    </>
   )
 }

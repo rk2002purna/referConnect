@@ -179,7 +179,7 @@ class JobService:
 
     async def get_employee_jobs(self, employee_id: int, skip: int = 0, limit: int = 100) -> List[Job]:
         """Get jobs posted by a specific employee."""
-        query = select(Job).where(Job.posted_by_employee_id == employee_id).offset(skip).limit(limit).order_by(Job.created_at.desc())
+        query = select(Job).where(Job.employee_id == employee_id).offset(skip).limit(limit).order_by(Job.created_at.desc())
 
         result = await self.db.execute(query)
         return result.scalars().all()

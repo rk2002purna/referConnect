@@ -1,37 +1,40 @@
 import React, { useState, useEffect } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
+import { referralRequestAPI } from '../lib/api'
 import { 
   Users, 
   Clock, 
-  MapPin, 
   Building, 
   CheckCircle, 
   XCircle, 
   Eye, 
-  MessageSquare,
   Calendar,
   User,
-  Star,
   RefreshCw,
-  Plus,
-  Send
+  X,
+  FileText,
+  Mail,
+  Phone,
+  Linkedin
 } from 'lucide-react'
 
 interface Referral {
   id: number
-  candidateName: string
-  candidateEmail: string
-  jobTitle: string
-  company: string
-  location: string
-  requestedDate: string
-  status: 'pending' | 'accepted' | 'declined' | 'interviewed' | 'hired' | 'rejected'
-  matchScore: number
-  notes?: string
-  lastActivity: string
-  referrerName: string
-  referrerEmail: string
+  job_id: number
+  job_title: string
+  company_name: string
+  jobseeker_name: string
+  jobseeker_email: string
+  jobseeker_id?: number
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn'
+  priority: 'low' | 'normal' | 'high' | 'urgent'
+  created_at: string
+  viewed_by_employee: boolean
+  resume_filename?: string
+  personal_note?: string
 }
 
 interface ReferralStats {
@@ -39,28 +42,46 @@ interface ReferralStats {
   pending: number
   accepted: number
   declined: number
-  interviewed: number
-  hired: number
-  successRate: number
+  withdrawn: number
+}
+
+interface ReferralDetail extends Referral {
+  jobseeker_phone?: string
+  linkedin_url?: string
 }
 
 export function MyReferrals() {
+  const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const [referrals, setReferrals] = useState<Referral[]>([])
   const [stats, setStats] = useState<ReferralStats>({
     total: 0,
     pending: 0,
     accepted: 0,
     declined: 0,
-    interviewed: 0,
-    hired: 0,
-    successRate: 0
+    withdrawn: 0
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'pending' | 'accepted' | 'declined' | 'interviewed' | 'hired' | 'rejected'>('all')
+  const [filter, setFilter] = useState<'all' | 'pending' | 'accepted' | 'declined' | 'withdrawn'>('all')
+  const [selectedReferral, setSelectedReferral] = useState<ReferralDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [timeTick, setTimeTick] = useState(0)
 
   useEffect(() => {
     loadReferrals()
+  }, [filter])
+
+  useEffect(() => {
+    const requestId = searchParams.get('request')
+    if (requestId) {
+      openReferralDetail(parseInt(requestId, 10))
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    const timer = setInterval(() => setTimeTick(prev => prev + 1), 60000)
+    return () => clearInterval(timer)
   }, [])
 
   const loadReferrals = async () => {
@@ -68,104 +89,27 @@ export function MyReferrals() {
       setLoading(true)
       setError(null)
       
-      // Mock data - replace with API calls
-      const mockReferrals: Referral[] = [
-        {
-          id: 1,
-          candidateName: 'Alice Johnson',
-          candidateEmail: 'alice@example.com',
-          jobTitle: 'Senior Frontend Developer',
-          company: 'TechCorp',
-          location: 'San Francisco, CA',
-          requestedDate: '2023-10-20',
-          status: 'accepted',
-          matchScore: 95,
-          notes: 'Excellent React skills, 5 years experience',
-          lastActivity: '2 hours ago',
-          referrerName: 'John Doe',
-          referrerEmail: 'john@techcorp.com'
-        },
-        {
-          id: 2,
-          candidateName: 'Bob Williams',
-          candidateEmail: 'bob@example.com',
-          jobTitle: 'Product Manager',
-          company: 'StartupXYZ',
-          location: 'Remote',
-          requestedDate: '2023-10-18',
-          status: 'interviewed',
-          matchScore: 88,
-          notes: 'Strong product background, MBA from Stanford',
-          lastActivity: '1 day ago',
-          referrerName: 'Sarah Smith',
-          referrerEmail: 'sarah@startupxyz.com'
-        },
-        {
-          id: 3,
-          candidateName: 'Charlie Brown',
-          candidateEmail: 'charlie@example.com',
-          jobTitle: 'UX Designer',
-          company: 'DesignStudio',
-          location: 'New York, NY',
-          requestedDate: '2023-10-15',
-          status: 'pending',
-          matchScore: 82,
-          notes: 'Creative designer with 3 years experience',
-          lastActivity: '3 days ago',
-          referrerName: 'Mike Wilson',
-          referrerEmail: 'mike@designstudio.com'
-        },
-        {
-          id: 4,
-          candidateName: 'Diana Prince',
-          candidateEmail: 'diana@example.com',
-          jobTitle: 'Backend Engineer',
-          company: 'DataCorp',
-          location: 'Austin, TX',
-          requestedDate: '2023-10-10',
-          status: 'hired',
-          matchScore: 92,
-          notes: 'Excellent Python and database skills',
-          lastActivity: '1 week ago',
-          referrerName: 'Alex Chen',
-          referrerEmail: 'alex@datacorp.com'
-        },
-        {
-          id: 5,
-          candidateName: 'Eve Adams',
-          candidateEmail: 'eve@example.com',
-          jobTitle: 'Marketing Manager',
-          company: 'GrowthCo',
-          location: 'Chicago, IL',
-          requestedDate: '2023-10-05',
-          status: 'declined',
-          matchScore: 75,
-          notes: 'Not a good fit for the role',
-          lastActivity: '2 weeks ago',
-          referrerName: 'Lisa Garcia',
-          referrerEmail: 'lisa@growthco.com'
-        }
-      ]
+      const response = await referralRequestAPI.getReferrals({
+        status: filter === 'all' ? undefined : filter,
+        limit: 100,
+        offset: 0
+      })
 
-      setReferrals(mockReferrals)
+      const data = response.data as Referral[]
+      setReferrals(data || [])
 
-      // Calculate stats
-      const total = mockReferrals.length
-      const pending = mockReferrals.filter(r => r.status === 'pending').length
-      const accepted = mockReferrals.filter(r => r.status === 'accepted').length
-      const declined = mockReferrals.filter(r => r.status === 'declined').length
-      const interviewed = mockReferrals.filter(r => r.status === 'interviewed').length
-      const hired = mockReferrals.filter(r => r.status === 'hired').length
-      const successRate = total > 0 ? Math.round(((accepted + interviewed + hired) / total) * 100) : 0
+      const total = data.length
+      const pending = data.filter(r => r.status === 'pending').length
+      const accepted = data.filter(r => r.status === 'accepted').length
+      const declined = data.filter(r => r.status === 'declined').length
+      const withdrawn = data.filter(r => r.status === 'withdrawn').length
 
       setStats({
         total,
         pending,
         accepted,
         declined,
-        interviewed,
-        hired,
-        successRate
+        withdrawn
       })
 
     } catch (err: any) {
@@ -176,14 +120,24 @@ export function MyReferrals() {
     }
   }
 
+  const openReferralDetail = async (referralId: number) => {
+    try {
+      setDetailLoading(true)
+      const response = await referralRequestAPI.getReferralById(referralId)
+      setSelectedReferral(response.data as ReferralDetail)
+    } catch (err) {
+      console.error('Failed to load referral detail:', err)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800'
       case 'accepted': return 'bg-blue-100 text-blue-800'
       case 'declined': return 'bg-red-100 text-red-800'
-      case 'interviewed': return 'bg-orange-100 text-orange-800'
-      case 'hired': return 'bg-green-100 text-green-800'
-      case 'rejected': return 'bg-red-100 text-red-800'
+      case 'withdrawn': return 'bg-gray-100 text-gray-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -193,11 +147,25 @@ export function MyReferrals() {
       case 'pending': return <Clock className="w-4 h-4" />
       case 'accepted': return <CheckCircle className="w-4 h-4" />
       case 'declined': return <XCircle className="w-4 h-4" />
-      case 'interviewed': return <MessageSquare className="w-4 h-4" />
-      case 'hired': return <CheckCircle className="w-4 h-4" />
-      case 'rejected': return <XCircle className="w-4 h-4" />
+      case 'withdrawn': return <XCircle className="w-4 h-4" />
       default: return <Clock className="w-4 h-4" />
     }
+  }
+
+  const parseDate = (dateString: string) => {
+    const hasTimezone = /Z|[+-]\d{2}:\d{2}$/.test(dateString)
+    return new Date(hasTimezone ? dateString : `${dateString}Z`)
+  }
+
+  const formatTimeAgo = (dateString: string) => {
+    void timeTick
+    const date = parseDate(dateString)
+    const now = new Date()
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
+    if (diffInMinutes < 1) return 'Just now'
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
+    return `${Math.floor(diffInMinutes / 1440)}d ago`
   }
 
   const filteredReferrals = referrals.filter(referral => 
@@ -208,6 +176,16 @@ export function MyReferrals() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  if (user?.role !== 'employee') {
+    return (
+      <div className="text-center py-12">
+        <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+        <h2 className="text-lg font-medium text-gray-900 mb-2">Access Denied</h2>
+        <p className="text-gray-500">Only employees can view referral requests.</p>
       </div>
     )
   }
@@ -230,15 +208,11 @@ export function MyReferrals() {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            Request Referral
-          </Button>
         </div>
       </div>
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -276,10 +250,21 @@ export function MyReferrals() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500">Success Rate</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.successRate}%</p>
+                <p className="text-sm font-medium text-gray-500">Declined</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.declined}</p>
               </div>
-              <Star className="w-8 h-8 text-purple-600" />
+              <XCircle className="w-8 h-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">Withdrawn</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.withdrawn}</p>
+              </div>
+              <XCircle className="w-8 h-8 text-gray-600" />
             </div>
           </CardContent>
         </Card>
@@ -292,9 +277,7 @@ export function MyReferrals() {
           { key: 'pending', label: 'Pending', count: stats.pending },
           { key: 'accepted', label: 'Accepted', count: stats.accepted },
           { key: 'declined', label: 'Declined', count: stats.declined },
-          { key: 'interviewed', label: 'Interviewed', count: stats.interviewed },
-          { key: 'hired', label: 'Hired', count: stats.hired },
-          { key: 'rejected', label: 'Rejected', count: referrals.filter(r => r.status === 'rejected').length },
+          { key: 'withdrawn', label: 'Withdrawn', count: stats.withdrawn },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -320,7 +303,7 @@ export function MyReferrals() {
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
                       <h3 className="text-lg font-semibold text-gray-900">
-                        {referral.candidateName}
+                        {referral.jobseeker_name}
                       </h3>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(referral.status)}`}>
                         {getStatusIcon(referral.status)}
@@ -331,65 +314,38 @@ export function MyReferrals() {
                     <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
                       <div className="flex items-center space-x-1">
                         <Building className="w-4 h-4" />
-                        <span>{referral.company}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <MapPin className="w-4 h-4" />
-                        <span>{referral.location}</span>
+                        <span>{referral.company_name}</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <Calendar className="w-4 h-4" />
-                        <span>Requested {referral.requestedDate}</span>
+                        <span>Requested {formatTimeAgo(referral.created_at)}</span>
                       </div>
                     </div>
 
                     <div className="mb-3">
-                      <h4 className="text-sm font-medium text-gray-900 mb-1">{referral.jobTitle}</h4>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500">
-                        <div className="flex items-center space-x-1">
-                          <Star className="w-4 h-4 text-yellow-500" />
-                          <span>{referral.matchScore}% match</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <User className="w-4 h-4" />
-                          <span>Referred by {referral.referrerName}</span>
-                        </div>
-                      </div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-1">{referral.job_title}</h4>
+                      {referral.personal_note && (
+                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg mb-3">
+                          {referral.personal_note}
+                        </p>
+                      )}
                     </div>
-
-                    {referral.notes && (
-                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg mb-3">
-                        {referral.notes}
-                      </p>
-                    )}
 
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-gray-500">
-                        Last activity: {referral.lastActivity}
+                        Priority: <span className="capitalize">{referral.priority}</span>
                       </p>
                       <div className="text-xs text-gray-500">
-                        {referral.candidateEmail}
+                        {referral.jobseeker_email}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-2 ml-4">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={() => openReferralDetail(referral.id)}>
                       <Eye className="w-4 h-4 mr-1" />
                       View
                     </Button>
-                    {referral.status === 'pending' && (
-                      <Button size="sm">
-                        <Send className="w-4 h-4 mr-1" />
-                        Follow Up
-                      </Button>
-                    )}
-                    {referral.status === 'accepted' && (
-                      <Button size="sm">
-                        <MessageSquare className="w-4 h-4 mr-1" />
-                        Message
-                      </Button>
-                    )}
                   </div>
                 </div>
               </CardContent>
@@ -402,18 +358,124 @@ export function MyReferrals() {
               <h3 className="text-lg font-medium text-gray-900 mb-2">No referrals found</h3>
               <p className="text-gray-600 mb-4">
                 {filter === 'all' 
-                  ? "You haven't requested any referrals yet." 
+                  ? "No referral requests yet." 
                   : `No referrals with status "${filter}" found.`
                 }
               </p>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Request Referral
-              </Button>
             </CardContent>
           </Card>
         )}
       </div>
+
+      {/* Detail Modal */}
+      {selectedReferral && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Referral Details</h3>
+                <p className="text-sm text-gray-600">{selectedReferral.job_title}</p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedReferral(null)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {detailLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-start space-x-3">
+                      <User className="w-5 h-5 text-gray-400 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-gray-500">Candidate</p>
+                        <p className="text-sm font-medium text-gray-900">{selectedReferral.jobseeker_name}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <Mail className="w-5 h-5 text-gray-400 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-gray-500">Email</p>
+                        <p className="text-sm font-medium text-gray-900">{selectedReferral.jobseeker_email}</p>
+                      </div>
+                    </div>
+                    {selectedReferral.jobseeker_phone && (
+                      <div className="flex items-start space-x-3">
+                        <Phone className="w-5 h-5 text-gray-400 mt-0.5" />
+                        <div>
+                          <p className="text-sm text-gray-500">Phone</p>
+                          <p className="text-sm font-medium text-gray-900">{selectedReferral.jobseeker_phone}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedReferral.linkedin_url && (
+                      <div className="flex items-start space-x-3">
+                        <Linkedin className="w-5 h-5 text-gray-400 mt-0.5" />
+                        <div>
+                          <p className="text-sm text-gray-500">LinkedIn</p>
+                          <a
+                            href={selectedReferral.linkedin_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-medium text-blue-600 hover:underline"
+                          >
+                            View Profile
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedReferral.personal_note && (
+                    <div>
+                      <p className="text-sm text-gray-500 mb-1">Personal Note</p>
+                      <div className="text-sm text-gray-700 bg-gray-50 border rounded-md p-3">
+                        {selectedReferral.personal_note}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between bg-gray-50 border rounded-md p-3">
+                    <div className="flex items-center space-x-2">
+                      <FileText className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm text-gray-700">
+                        {selectedReferral.resume_filename || 'No resume uploaded'}
+                      </span>
+                    </div>
+                    {selectedReferral.resume_filename && (
+                      <a
+                        className="text-sm text-blue-600 hover:underline"
+                        href={`/api/v1/referral-requests/${selectedReferral.id}/resume`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Download
+                      </a>
+                    )}
+                  </div>
+
+                  {selectedReferral.jobseeker_id && (
+                    <div className="flex justify-end">
+                      <Button asChild variant="outline" size="sm">
+                        <Link
+                          to={`/jobseeker/${selectedReferral.jobseeker_id}`}
+                          onClick={() => setSelectedReferral(null)}
+                        >
+                          View Jobseeker Profile
+                        </Link>
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

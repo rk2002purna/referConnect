@@ -4,7 +4,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Badge } from '../ui/Badge'
 import { Search, Building2, CheckCircle, ArrowLeft, ArrowRight, Loader2, Save } from 'lucide-react'
-import { verificationAPI } from '../../lib/api'
+import { getApiBaseUrl, verificationAPI } from '../../lib/api'
 
 interface Company {
   id: number
@@ -37,8 +37,9 @@ export function CompanySearchStep({ onCompanySelect, onPrevious, onNext }: Compa
       setLoading(true)
       try {
         console.log('Fetching companies from API...')
-        console.log('API Base URL:', process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1')
-        console.log('Full URL:', `${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/verification/companies`)
+        const apiBaseUrl = getApiBaseUrl()
+        console.log('API Base URL:', apiBaseUrl)
+        console.log('Full URL:', `${apiBaseUrl}/verification/companies`)
         const response = await verificationAPI.getVerifiedCompanies()
         console.log('API Response:', response)
         const companiesData = response.data.companies
@@ -95,7 +96,7 @@ export function CompanySearchStep({ onCompanySelect, onPrevious, onNext }: Compa
           } else {
             // Search via API
             console.log('Searching companies via API with query:', query)
-            console.log('Search URL:', `${process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1'}/verification/companies?query=${query}`)
+            console.log('Search URL:', `${getApiBaseUrl()}/verification/companies?query=${query}`)
             const response = await verificationAPI.getVerifiedCompanies(query)
             console.log('Search API Response:', response)
             const searchResults = response.data.companies

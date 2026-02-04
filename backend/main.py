@@ -115,6 +115,74 @@ def run_migrations():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        -- Referral Requests table
+        CREATE TABLE IF NOT EXISTS referral_requests (
+            id SERIAL PRIMARY KEY,
+            job_id INTEGER REFERENCES jobs(id),
+            employee_id INTEGER REFERENCES users(id),
+            jobseeker_id INTEGER REFERENCES users(id),
+            jobseeker_name VARCHAR(200) NOT NULL,
+            jobseeker_email VARCHAR(255) NOT NULL,
+            jobseeker_phone VARCHAR(20),
+            linkedin_url VARCHAR(500),
+            resume_filename VARCHAR(255),
+            resume_file_path VARCHAR(500),
+            resume_file_size INTEGER,
+            resume_mime_type VARCHAR(100),
+            personal_note TEXT,
+            status VARCHAR(20) DEFAULT 'pending',
+            priority VARCHAR(20) DEFAULT 'normal',
+            employee_response TEXT,
+            employee_notes TEXT,
+            responded_at TIMESTAMP NULL,
+            request_metadata JSONB,
+            viewed_by_employee BOOLEAN DEFAULT FALSE,
+            viewed_at TIMESTAMP NULL,
+            last_activity TIMESTAMP NULL,
+            notification_sent BOOLEAN DEFAULT FALSE,
+            notification_sent_at TIMESTAMP NULL,
+            reminder_sent BOOLEAN DEFAULT FALSE,
+            reminder_sent_at TIMESTAMP NULL,
+            response_time_hours FLOAT,
+            outcome VARCHAR(50),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Notifications table
+        CREATE TABLE IF NOT EXISTS notifications (
+            id SERIAL PRIMARY KEY,
+            recipient_id INTEGER NOT NULL,
+            sender_id INTEGER,
+            title VARCHAR(200) NOT NULL,
+            message VARCHAR(1000) NOT NULL,
+            notification_type VARCHAR(50) NOT NULL,
+            priority VARCHAR(20) DEFAULT 'medium',
+            channels VARCHAR(100) DEFAULT 'in_app',
+            notification_metadata JSONB,
+            is_read BOOLEAN DEFAULT FALSE,
+            is_archived BOOLEAN DEFAULT FALSE,
+            sent_at TIMESTAMP NULL,
+            read_at TIMESTAMP NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Notification Preferences table
+        CREATE TABLE IF NOT EXISTS notification_preferences (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER UNIQUE NOT NULL,
+            email_notifications BOOLEAN DEFAULT TRUE,
+            in_app_notifications BOOLEAN DEFAULT TRUE,
+            sms_notifications BOOLEAN DEFAULT FALSE,
+            push_notifications BOOLEAN DEFAULT TRUE,
+            referral_notifications BOOLEAN DEFAULT TRUE,
+            job_notifications BOOLEAN DEFAULT TRUE,
+            system_notifications BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         -- Create indexes for better performance
         CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
         CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
@@ -124,6 +192,14 @@ def run_migrations():
         CREATE INDEX IF NOT EXISTS idx_referrals_job_id ON referrals(job_id);
         CREATE INDEX IF NOT EXISTS idx_referrals_seeker_id ON referrals(seeker_id);
         CREATE INDEX IF NOT EXISTS idx_referrals_employee_id ON referrals(employee_id);
+        CREATE INDEX IF NOT EXISTS idx_referral_requests_job_id ON referral_requests(job_id);
+        CREATE INDEX IF NOT EXISTS idx_referral_requests_employee_id ON referral_requests(employee_id);
+        CREATE INDEX IF NOT EXISTS idx_referral_requests_jobseeker_id ON referral_requests(jobseeker_id);
+        CREATE INDEX IF NOT EXISTS idx_referral_requests_jobseeker_email ON referral_requests(jobseeker_email);
+        CREATE INDEX IF NOT EXISTS idx_referral_requests_status ON referral_requests(status);
+        CREATE INDEX IF NOT EXISTS idx_notifications_recipient_id ON notifications(recipient_id);
+        CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+        CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(notification_type);
 
         -- Insert some sample companies
         INSERT INTO companies (name, domain, industry, size, is_verified) VALUES

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bell, Loader2 } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card'
@@ -12,6 +13,7 @@ interface Notification {
   notification_type: string
   is_read: boolean
   created_at: string
+  metadata?: Record<string, any>
 }
 
 interface NotificationBellProps {
@@ -19,10 +21,12 @@ interface NotificationBellProps {
 }
 
 export function NotificationBell({ className }: NotificationBellProps) {
+  const navigate = useNavigate()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [timeTick, setTimeTick] = useState(0)
 
   useEffect(() => {
     fetchNotifications()
@@ -31,6 +35,11 @@ export function NotificationBell({ className }: NotificationBellProps) {
     const interval = setInterval(fetchNotifications, 30000)
     
     return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    const timer = setInterval(() => setTimeTick(prev => prev + 1), 60000)
+    return () => clearInterval(timer)
   }, [])
 
   const fetchNotifications = async () => {
@@ -72,6 +81,21 @@ export function NotificationBell({ className }: NotificationBellProps) {
     }
   }
 
+  const handleNotificationClick = async (notification: Notification) => {
+    await markAsRead(notification.id)
+    setIsOpen(false)
+
+    if (notification.notification_type === 'referral_received') {
+      const referralId = notification.metadata?.referral_id
+      if (referralId) {
+        navigate(`/referrals?request=${referralId}`)
+        return
+      }
+      navigate('/referrals')
+      return
+    }
+  }
+
   const markAllAsRead = async () => {
     try {
       await notificationAPI.markAllRead()
@@ -84,8 +108,15 @@ export function NotificationBell({ className }: NotificationBellProps) {
     }
   }
 
+  const parseDate = (dateString: string) => {
+    // If backend sends naive timestamp (no timezone), treat as UTC.
+    const hasTimezone = /Z|[+-]\d{2}:\d{2}$/.test(dateString)
+    return new Date(hasTimezone ? dateString : `${dateString}Z`)
+  }
+
   const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString)
+    void timeTick
+    const date = parseDate(dateString)
     const now = new Date()
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
     
@@ -172,7 +203,7 @@ export function NotificationBell({ className }: NotificationBellProps) {
                       className={`p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
                         !notification.is_read ? 'bg-blue-50' : ''
                       }`}
-                      onClick={() => markAsRead(notification.id)}
+                      onClick={() => handleNotificationClick(notification)}
                     >
                       <div className="flex items-start space-x-3">
                         <span className="text-lg">
