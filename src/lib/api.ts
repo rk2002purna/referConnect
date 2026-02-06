@@ -185,6 +185,11 @@ export const referralRequestAPI = {
   getReferrals: (params?: { status?: string; limit?: number; offset?: number }) =>
     api.get('/referral-requests/', { params }),
   getReferralById: (id: number) => api.get(`/referral-requests/${id}`),
+  updateReferral: (id: number, data: any) => api.put(`/referral-requests/${id}`, data),
+  enableChat: (id: number) => api.post(`/referral-requests/${id}/chat/enable`),
+  getChat: (id: number) => api.get(`/referral-requests/${id}/chat`),
+  sendChatMessage: (id: number, data: ReferralChatMessageCreate) =>
+    api.post(`/referral-requests/${id}/chat/messages`, data),
 }
 
 // Analytics API
@@ -543,6 +548,23 @@ export interface ReferralSearchParams {
   query?: string
   page?: number
   size?: number
+}
+
+export interface ReferralChatMessage {
+  id: string
+  sender_id: number
+  sender_role: 'employee' | 'jobseeker' | 'system'
+  content: string
+  created_at: string
+}
+
+export interface ReferralChatState {
+  chat_enabled: boolean
+  messages: ReferralChatMessage[]
+}
+
+export interface ReferralChatMessageCreate {
+  content: string
 }
 
 export interface SearchRequestData {

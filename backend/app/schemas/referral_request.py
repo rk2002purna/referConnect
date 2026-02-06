@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, validator
 from enum import Enum
@@ -89,6 +89,10 @@ class ReferralRequestList(BaseModel):
     viewed_by_employee: bool
     resume_filename: Optional[str]
     personal_note: Optional[str]
+    chat_enabled: Optional[bool] = None
+    chat_unread_count: Optional[int] = None
+    last_message_at: Optional[datetime] = None
+    last_message_preview: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -102,6 +106,10 @@ class ReferralRequestDetail(ReferralRequestResponse):
     request_metadata: Optional[Dict[str, Any]]
     response_time_hours: Optional[float]
     outcome: Optional[str]
+    chat_enabled: Optional[bool] = None
+    chat_unread_count: Optional[int] = None
+    last_message_at: Optional[datetime] = None
+    last_message_preview: Optional[str] = None
 
 
 class ReferralRequestStats(BaseModel):
@@ -122,3 +130,20 @@ class ReferralRequestNotification(BaseModel):
     priority: str
     created_at: datetime
     is_urgent: bool = False
+
+
+class ReferralChatMessage(BaseModel):
+    id: str
+    sender_id: int
+    sender_role: str
+    content: str = Field(..., min_length=1, max_length=2000)
+    created_at: datetime
+
+
+class ReferralChatMessageCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+
+
+class ReferralChatState(BaseModel):
+    chat_enabled: bool
+    messages: List[ReferralChatMessage]

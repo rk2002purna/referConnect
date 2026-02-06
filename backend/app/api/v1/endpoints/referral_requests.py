@@ -2,20 +2,66 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlmodel import Session, select
+from sqlalchemy import update
 import os
+from datetime import datetime
+import uuid
+import json
 
 from app.db.session import get_db_session
 from app.dependencies.auth import get_current_user
 from app.models.user import User, Job, Company
+from app.models.referral_request import ReferralRequest
 from app.schemas.referral_request import (
     ReferralRequestCreate, ReferralRequestUpdate, ReferralRequestResponse,
     ReferralRequestList, ReferralRequestDetail, ReferralRequestStats,
-    ReferralRequestStatus, ReferralRequestPriority
+    ReferralRequestStatus, ReferralRequestPriority,
+    ReferralChatState, ReferralChatMessage, ReferralChatMessageCreate
 )
 from app.services.referral_request_service import ReferralRequestService
 from app.services.s3_service import S3FileService
 
 router = APIRouter()
+
+
+def _normalize_metadata(value):
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _ensure_chat_metadata(value):
+    metadata = _normalize_metadata(value)
+    metadata.setdefault("chat_enabled", False)
+    metadata.setdefault("messages", [])
+    metadata.setdefault("unread_by_employee", 0)
+    metadata.setdefault("unread_by_jobseeker", 0)
+    return metadata
+
+
+def _last_message_info(metadata):
+    last_message_at = metadata.get("last_message_at")
+    last_message_preview = metadata.get("last_message_preview")
+    if last_message_at and last_message_preview:
+        return last_message_at, last_message_preview
+    messages = metadata.get("messages") or []
+    if messages:
+        last = messages[-1]
+        return last.get("created_at"), (last.get("content") or "")[:140]
+    return None, None
+
+
+def _unread_count(metadata, role_value: str) -> int:
+    if role_value == "employee":
+        return int(metadata.get("unread_by_employee") or 0)
+    return int(metadata.get("unread_by_jobseeker") or 0)
 
 
 @router.post("/", response_model=ReferralRequestResponse, summary="Create a referral request")
@@ -69,12 +115,12 @@ def create_referral_request(
     
     # Handle resume upload
     resume_file = None
-    resume_filename = None
     resume_mime_type = None
+    provided_resume_filename = resume_filename
     
     if resume:
         resume_file = resume.file.read()
-        resume_filename = resume.filename
+        provided_resume_filename = resume.filename
         resume_mime_type = resume.content_type
     
     # Create referral request
@@ -84,7 +130,7 @@ def create_referral_request(
             request_data=request_data,
             jobseeker_id=current_user.id,
             resume_file=resume_file,
-            resume_filename=resume_filename,
+            resume_filename=provided_resume_filename,
             resume_mime_type=resume_mime_type,
             resume_key=resume_key,
             resume_url=resume_url
@@ -133,10 +179,15 @@ def get_referral_requests(
     companies = companies_result.scalars().all() if companies_result else []
     companies_by_id = {c.id: c for c in companies}
 
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
     formatted = []
     for r in requests:
         job = jobs_by_id.get(r.job_id)
         company = companies_by_id.get(job.company_id) if job else None
+        metadata = _ensure_chat_metadata(r.request_metadata)
+        last_message_at, last_message_preview = _last_message_info(metadata)
+        has_resume = bool(r.resume_filename) or bool(metadata.get("resume_key") or metadata.get("resume_url"))
+        chat_unread_count = _unread_count(metadata, role_value)
         formatted.append({
             "id": r.id,
             "job_id": r.job_id,
@@ -148,8 +199,12 @@ def get_referral_requests(
             "priority": r.priority,
             "created_at": r.created_at,
             "viewed_by_employee": r.viewed_by_employee,
-            "resume_filename": r.resume_filename,
-            "personal_note": r.personal_note
+            "resume_filename": r.resume_filename or ("Resume" if has_resume else None),
+            "personal_note": r.personal_note,
+            "chat_enabled": bool(metadata.get("chat_enabled")),
+            "chat_unread_count": chat_unread_count,
+            "last_message_at": last_message_at,
+            "last_message_preview": last_message_preview
         })
 
     return formatted
@@ -177,12 +232,22 @@ def get_referral_request(
     company = db.execute(select(Company).where(Company.id == job.company_id)).scalar_one_or_none() if job else None
     employee_user = db.execute(select(User).where(User.id == request.employee_id)).scalar_one_or_none()
 
+    metadata = _ensure_chat_metadata(request.request_metadata)
+    last_message_at, last_message_preview = _last_message_info(metadata)
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+    has_resume = bool(request.resume_filename) or bool(metadata.get("resume_key") or metadata.get("resume_url"))
+    chat_unread_count = _unread_count(metadata, role_value)
     return {
         **request.model_dump(),
         "job_title": job.title if job else "Unknown",
         "company_name": company.name if company else "Unknown",
         "employee_name": f"{employee_user.first_name or ''} {employee_user.last_name or ''}".strip() if employee_user else "Unknown",
-        "employee_email": employee_user.email if employee_user else "Unknown"
+        "employee_email": employee_user.email if employee_user else "Unknown",
+        "resume_filename": request.resume_filename or ("Resume" if has_resume else None),
+        "chat_enabled": bool(metadata.get("chat_enabled")),
+        "chat_unread_count": chat_unread_count,
+        "last_message_at": last_message_at,
+        "last_message_preview": last_message_preview,
     }
 
 
@@ -206,6 +271,122 @@ def update_referral_request(
         raise HTTPException(status_code=404, detail="Referral request not found or access denied")
     
     return updated_request
+
+
+@router.post("/{request_id}/chat/enable", response_model=ReferralChatState, summary="Enable chat for referral request")
+def enable_chat(
+    request_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    """Enable chat for a referral request (employee only)."""
+    service = ReferralRequestService(db)
+    request = service.get_referral_request_by_id(request_id, current_user.id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Referral request not found or access denied")
+
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+    if role_value != "employee":
+        raise HTTPException(status_code=403, detail="Only employees can enable chat")
+
+    metadata = _ensure_chat_metadata(request.request_metadata)
+    metadata["chat_enabled"] = True
+    metadata.setdefault("messages", [])
+
+    db.execute(
+        update(ReferralRequest)
+        .where(ReferralRequest.id == request.id)
+        .values(request_metadata=metadata, last_activity=datetime.utcnow())
+    )
+    db.commit()
+
+    return ReferralChatState(
+        chat_enabled=True,
+        messages=metadata.get("messages", [])
+    )
+
+
+@router.get("/{request_id}/chat", response_model=ReferralChatState, summary="Get referral chat state")
+def get_chat_state(
+    request_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    """Get chat messages for a referral request."""
+    service = ReferralRequestService(db)
+    request = service.get_referral_request_by_id(request_id, current_user.id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Referral request not found or access denied")
+
+    metadata = _ensure_chat_metadata(request.request_metadata)
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+    unread_key = "unread_by_employee" if role_value == "employee" else "unread_by_jobseeker"
+
+    if metadata.get(unread_key):
+        metadata[unread_key] = 0
+        db.execute(
+            update(ReferralRequest)
+            .where(ReferralRequest.id == request.id)
+            .values(request_metadata=metadata)
+        )
+        db.commit()
+
+    return ReferralChatState(
+        chat_enabled=bool(metadata.get("chat_enabled", False)),
+        messages=metadata.get("messages", [])
+    )
+
+
+@router.post("/{request_id}/chat/messages", response_model=ReferralChatMessage, summary="Send a referral chat message")
+def send_chat_message(
+    request_id: int,
+    message_data: ReferralChatMessageCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    """Send a chat message for a referral request."""
+    service = ReferralRequestService(db)
+    request = service.get_referral_request_by_id(request_id, current_user.id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Referral request not found or access denied")
+
+    metadata = _ensure_chat_metadata(request.request_metadata)
+    if not metadata.get("chat_enabled"):
+        raise HTTPException(status_code=400, detail="Chat is not enabled for this referral")
+
+    role_value = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+    new_message = {
+        "id": str(uuid.uuid4()),
+        "sender_id": current_user.id,
+        "sender_role": role_value,
+        "content": message_data.content,
+        "created_at": datetime.utcnow().isoformat()
+    }
+
+    messages = list(metadata.get("messages") or [])
+    messages.append(new_message)
+
+    if len(messages) > 200:
+        messages = messages[-200:]
+
+    metadata["messages"] = messages
+    metadata["last_message_at"] = new_message["created_at"]
+    metadata["last_message_preview"] = new_message["content"][:140]
+
+    if role_value == "employee":
+        metadata["unread_by_jobseeker"] = int(metadata.get("unread_by_jobseeker") or 0) + 1
+        metadata["unread_by_employee"] = 0
+    else:
+        metadata["unread_by_employee"] = int(metadata.get("unread_by_employee") or 0) + 1
+        metadata["unread_by_jobseeker"] = 0
+    db.execute(
+        update(ReferralRequest)
+        .where(ReferralRequest.id == request.id)
+        .values(request_metadata=metadata, last_activity=datetime.utcnow())
+    )
+    db.commit()
+
+    return new_message
 
 
 @router.get("/stats/overview", response_model=ReferralRequestStats, summary="Get referral request statistics")

@@ -46,7 +46,7 @@ export function Header() {
       return [
         ...baseItems,
         { name: 'My Applications', href: '/applications', icon: Briefcase },
-        { name: 'My Referrals', href: '/referrals', icon: Users },
+        { name: 'Messages', href: '/messages', icon: Users },
         { name: 'Notifications', href: '/notifications', icon: Bell },
       ]
     }

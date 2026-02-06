@@ -1,0 +1,65 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Length 3127 >>
+stream
+BT /F2 18 Tf 1 0 0 1 54.00 738.00 Tm (ReferConnect App Summary) Tj ET
+BT /F2 12 Tf 1 0 0 1 54.00 716.00 Tm (What It Is) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 700.00 Tm (ReferConnect is a professional referral platform that connects job seekers with employees) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 688.00 Tm (at verified companies to enable trusted referrals and job opportunities.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 676.00 Tm (This repo contains the React frontend for the platform.) Tj ET
+BT /F2 12 Tf 1 0 0 1 54.00 658.00 Tm (Who It's For) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 642.00 Tm (Primary users are job seekers seeking employee referrals; secondary users are verified) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 630.00 Tm (employees who can refer candidates at their companies.) Tj ET
+BT /F2 12 Tf 1 0 0 1 54.00 612.00 Tm (What It Does) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 596.00 Tm (- Role-based registration, login, and profile management for job seekers and employees.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 584.00 Tm (- Guided onboarding with profile completion tracking and role-specific requirements.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 572.00 Tm (- Job search and job postings, plus application tracking views.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 560.00 Tm (- Referral requests and referral management with status updates.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 548.00 Tm (- Company verification via email/OTP and verified company search and selection.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 536.00 Tm (- Resume upload and profile data capture for skills and experience.) Tj ET
+BT /F2 12 Tf 1 0 0 1 54.00 518.00 Tm (How It Works \(Repo Evidence\)) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 502.00 Tm (- React 18 + TypeScript UI in src/ with React Router for navigation and Tailwind CSS for) Tj ET
+BT /F1 10 Tf 1 0 0 1 66.00 490.00 Tm (styling.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 478.00 Tm (- Axios API client in src/lib/api.ts uses JWT access and refresh tokens from localStorage) Tj ET
+BT /F1 10 Tf 1 0 0 1 66.00 466.00 Tm (to call REST endpoints at REACT_APP_API_URL \(default /api/v1\).) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 454.00 Tm (- Backend service lives in backend/ and uses FastAPI with SQLModel/SQLAlchemy; database is) Tj ET
+BT /F1 10 Tf 1 0 0 1 66.00 442.00 Tm (configured via DATABASE_URL \(docs show SQLite and PostgreSQL options\).) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 430.00 Tm (- Optional resume storage uses S3 settings in env files and frontend S3 config in) Tj ET
+BT /F1 10 Tf 1 0 0 1 66.00 418.00 Tm (src/lib/s3Config.ts.) Tj ET
+BT /F2 12 Tf 1 0 0 1 54.00 400.00 Tm (How To Run \(Minimal\)) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 384.00 Tm (- Create .env \(frontend\) and backend/.env with REACT_APP_API_URL and DATABASE_URL \(see) Tj ET
+BT /F1 10 Tf 1 0 0 1 66.00 372.00 Tm (QUICK_START.md or LOCAL_SETUP.md\).) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 360.00 Tm (- First time setup: run ./setup_local.sh.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 348.00 Tm (- Start backend: run ./start_backend.sh \(API at http://localhost:8000\).) Tj ET
+BT /F1 10 Tf 1 0 0 1 54.00 336.00 Tm (- Start frontend: run ./start_frontend.sh or npm start \(app at http://localhost:3000\).) Tj ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000321 00000 n 
+0000000396 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3575
+%%EOF

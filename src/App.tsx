@@ -11,6 +11,7 @@ import { JobSearch } from './pages/JobSearch'
 import { MyApplications } from './pages/MyApplications'
 import { MyReferrals } from './pages/MyReferrals'
 import { JobSeekerProfile } from './pages/JobSeekerProfile'
+import { Messages } from './pages/Messages'
 import { Profile } from './pages/Profile'
 import { EmployeeProfile } from './pages/EmployeeProfile'
 import PostJob from './pages/PostJob'
@@ -210,6 +211,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Layout><Notifications /></Layout>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/messages" 
+                  element={
+                    <ProtectedRoute>
+                      <Layout><Messages /></Layout>
                     </ProtectedRoute>
                   } 
                 />
